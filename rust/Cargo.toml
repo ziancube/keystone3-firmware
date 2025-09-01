@@ -116,3 +116,11 @@ blake2b_simd = { version = "1.0.2", default-features = false }
 getrandom = "0.2"
 minicbor = { version = "0.19", features = ["alloc"] }
 # third party dependencies end
+
+
+[profile.release]
+opt-level = "z"   # "z" 代表最小体积，"s" 代表较小体积
+lto = true        # 开启 link time optimization，进一步减小体积
+codegen-units = 1 # 只有 1 个 codegen 单元，优化体积
+strip = true      # strip 掉符号（Rust 1.59+ 支持）
+
