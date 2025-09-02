@@ -35,8 +35,8 @@ use crate::common::KEYSTONE;
 use crate::extract_ptr_with_type;
 
 use structs::{
-    DisplayETH, DisplayETHBatchTx, DisplayETHPersonalMessage, DisplayETHTypedData,
-    EthParsedErc20Approval, EthParsedErc20Transaction, TransactionType,
+    CParsedEthereumTransaction, DisplayETH, DisplayETHBatchTx, DisplayETHPersonalMessage,
+    DisplayETHTypedData, EthParsedErc20Approval, EthParsedErc20Transaction, TransactionType,
 };
 
 mod abi;
@@ -126,6 +126,17 @@ pub extern "C" fn eth_get_root_path_bytes(ptr: PtrUR) -> PtrString {
         .collect::<Vec<&str>>()
         .join("/");
     convert_c_char(root_path)
+}
+
+#[no_mangle]
+pub extern "C" fn eth_get_current_ur_path(ptr: PtrUR) -> PtrString {
+    let eth_sign_request = extract_ptr_with_type!(ptr, EthSignRequest);
+    let derivation_path: ur_registry::crypto_key_path::CryptoKeyPath =
+        eth_sign_request.get_derivation_path();
+    if let Some(path) = derivation_path.get_path() {
+        return convert_c_char(format!("m/{}", path));
+    }
+    convert_c_char("".to_string())
 }
 
 #[no_mangle]
@@ -226,6 +237,57 @@ pub extern "C" fn eth_parse_bytes_data(
     let mut display_eth = DisplayETH::try_from(eth_tx).unwrap();
     display_eth = display_eth.set_from_address(address);
     TransactionParseResult::success(display_eth.c_ptr()).c_ptr()
+}
+
+#[no_mangle]
+pub extern "C" fn eth_parse_raw(
+    ptr: PtrUR,
+    xpub: PtrString,
+) -> PtrT<TransactionParseResult<CParsedEthereumTransaction>> {
+    let crypto_eth = extract_ptr_with_type!(ptr, EthSignRequest);
+    let xpub = recover_c_char(xpub);
+    let pubkey = match try_get_eth_public_key(xpub, &crypto_eth) {
+        Ok(key) => Some(key),
+        Err(e) => None,
+    };
+    let transaction_type = TransactionType::from(crypto_eth.get_data_type());
+    match transaction_type {
+        TransactionType::Legacy => {
+            let tx = parse_legacy_tx(&crypto_eth.get_sign_data(), pubkey);
+            match tx {
+                Ok(t) => {
+                    TransactionParseResult::success(CParsedEthereumTransaction::from(t).c_ptr())
+                        .c_ptr()
+                }
+                Err(e) => TransactionParseResult::from(e).c_ptr(),
+            }
+        }
+        TransactionType::TypedTransaction => {
+            match crypto_eth.get_sign_data().first() {
+                Some(02) => {
+                    //remove envelop
+                    let payload = &crypto_eth.get_sign_data()[1..];
+                    let tx = parse_fee_market_tx(payload, pubkey);
+                    match tx {
+                        Ok(t) => TransactionParseResult::success(
+                            CParsedEthereumTransaction::from(t).c_ptr(),
+                        )
+                        .c_ptr(),
+                        Err(e) => TransactionParseResult::from(e).c_ptr(),
+                    }
+                }
+                Some(x) => TransactionParseResult::from(RustCError::UnsupportedTransaction(
+                    format!("ethereum tx type:{}", x),
+                ))
+                .c_ptr(),
+                None => TransactionParseResult::from(EthereumError::InvalidTransaction).c_ptr(),
+            }
+        }
+        _ => TransactionParseResult::from(RustCError::UnsupportedTransaction(
+            "PersonalMessage or TypedData".to_string(),
+        ))
+        .c_ptr(),
+    }
 }
 
 #[no_mangle]
@@ -541,6 +603,25 @@ pub extern "C" fn eth_parse_typed_data(
         _ => TransactionParseResult::from(RustCError::UnsupportedTransaction(
             "Legacy or TypedTransaction or PersonalMessage".to_string(),
         ))
+        .c_ptr(),
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn eth_ur_encode_signature(
+    signature: PtrBytes,
+    signature_len: u32,
+    origin: PtrString,
+) -> PtrT<UREncodeResult> {
+    let signature = unsafe { slice::from_raw_parts(signature, signature_len as usize) };
+    let eth_signature = EthSignature::new(None, signature.to_vec(), Some(recover_c_char(origin)));
+    match eth_signature.try_into() {
+        Err(e) => UREncodeResult::from(e).c_ptr(),
+        Ok(v) => UREncodeResult::encode(
+            v,
+            EthSignature::get_registry_type().get_type(),
+            FRAGMENT_MAX_LENGTH_DEFAULT,
+        )
         .c_ptr(),
     }
 }

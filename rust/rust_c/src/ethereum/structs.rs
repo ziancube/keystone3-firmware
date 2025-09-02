@@ -18,6 +18,64 @@ use core::str::FromStr;
 use itertools::Itertools;
 use ur_registry::ethereum::eth_sign_request::DataType;
 use ur_registry::pb::protoc::EthTx;
+
+#[repr(C)]
+pub struct CParsedEthereumTransaction {
+    pub value: PtrString,
+    pub max_txn_fee: PtrString,
+    pub gas_price: PtrString,
+    pub gas_limit: PtrString,
+    pub from: PtrString,
+    pub to: PtrString,
+    pub nonce: u32,
+    pub input: PtrString,
+    pub max_fee: PtrString,
+    pub max_priority: PtrString,
+    pub max_fee_per_gas: PtrString,
+    pub max_priority_fee_per_gas: PtrString,
+    pub chain_id: u64,
+}
+
+impl From<app_ethereum::structs::ParsedEthereumTransaction> for CParsedEthereumTransaction {
+    fn from(tx: app_ethereum::structs::ParsedEthereumTransaction) -> Self {
+        Self {
+            value: convert_c_char(tx.value),
+            max_txn_fee: convert_c_char(tx.max_txn_fee),
+            gas_price: tx.gas_price.map(convert_c_char).unwrap_or(null_mut()),
+            gas_limit: convert_c_char(tx.gas_limit),
+            from: tx.from.map(convert_c_char).unwrap_or(null_mut()),
+            to: convert_c_char(tx.to),
+            nonce: tx.nonce,
+            input: convert_c_char(tx.input),
+            max_fee: tx.max_fee.map(convert_c_char).unwrap_or(null_mut()),
+            max_priority: tx.max_priority.map(convert_c_char).unwrap_or(null_mut()),
+            max_fee_per_gas: tx.max_fee_per_gas.map(convert_c_char).unwrap_or(null_mut()),
+            max_priority_fee_per_gas: tx
+                .max_priority_fee_per_gas
+                .map(convert_c_char)
+                .unwrap_or(null_mut()),
+            chain_id: tx.chain_id,
+        }
+    }
+}
+
+impl Free for CParsedEthereumTransaction {
+    fn free(&self) {
+        free_str_ptr!(self.value);
+        free_str_ptr!(self.max_txn_fee);
+        free_str_ptr!(self.gas_price);
+        free_str_ptr!(self.gas_limit);
+        free_str_ptr!(self.from);
+        free_str_ptr!(self.to);
+        free_str_ptr!(self.input);
+        free_str_ptr!(self.max_fee);
+        free_str_ptr!(self.max_priority);
+        free_str_ptr!(self.max_fee_per_gas);
+        free_str_ptr!(self.max_priority_fee_per_gas);
+    }
+}
+
+impl_c_ptr!(CParsedEthereumTransaction);
 #[repr(C)]
 pub struct DisplayETH {
     pub(crate) tx_type: PtrString,
@@ -550,6 +608,7 @@ impl Free for DisplaySwapkitContractData {
 impl_c_ptr!(DisplayETHBatchTx);
 
 make_free_method!(TransactionParseResult<DisplayETH>);
+make_free_method!(TransactionParseResult<CParsedEthereumTransaction>);
 make_free_method!(TransactionParseResult<DisplayETHPersonalMessage>);
 make_free_method!(TransactionParseResult<DisplayETHTypedData>);
 make_free_method!(TransactionParseResult<DisplayETHBatchTx>);
