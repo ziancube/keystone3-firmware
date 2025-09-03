@@ -6,6 +6,14 @@ use ethereum_types::U256;
 static F_DIVIDER: f64 = 1_000_000_000f64;
 static U_DIVIDER: u64 = 1_000_000_000;
 
+pub fn normalize_price_in_wei(price: u64) -> String {
+    format!("{}", price)
+}
+
+pub fn normalize_value_in_wei(value: U256) -> String {
+    return value.to_string();
+}
+
 pub fn normalize_price(gas: u64) -> String {
     format!("{} Gwei", (gas as f64).div(F_DIVIDER))
 }

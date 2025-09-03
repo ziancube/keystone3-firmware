@@ -10,7 +10,9 @@ use rlp::{Decodable, DecoderError, Encodable, Rlp};
 use ur_registry::pb::protoc::EthTx;
 
 use crate::erc20::encode_erc20_transfer_calldata;
-use crate::normalizer::{normalize_price, normalize_value};
+use crate::normalizer::{
+    normalize_price, normalize_price_in_wei, normalize_value, normalize_value_in_wei,
+};
 use crate::structs::{EthereumSignature, TransactionAction};
 use crate::traits::BaseTransaction;
 use crate::{impl_base_transaction, H160};
@@ -281,13 +283,13 @@ impl From<LegacyTransaction> for ParsedLegacyTransaction {
     fn from(value: LegacyTransaction) -> Self {
         Self {
             nonce: value.nonce.as_u32(),
-            gas_price: normalize_price(value.gas_price.as_u64()),
+            gas_price: normalize_price_in_wei(value.gas_price.as_u64()),
             gas_limit: value.gas_limit.to_string(),
             to: format!("0x{}", hex::encode(value.get_to())),
-            value: normalize_value(value.get_value()),
+            value: normalize_value_in_wei(value.get_value()),
             input: hex::encode(value.get_data()),
             chain_id: value.chain_id(),
-            max_txn_fee: normalize_value(value.gas_price.mul(value.gas_limit)),
+            max_txn_fee: normalize_value_in_wei(value.gas_price.mul(value.gas_limit)),
         }
     }
 }

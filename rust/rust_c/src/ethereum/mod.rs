@@ -609,12 +609,18 @@ pub extern "C" fn eth_parse_typed_data(
 
 #[no_mangle]
 pub extern "C" fn eth_ur_encode_signature(
+    ptr: PtrUR,
     signature: PtrBytes,
     signature_len: u32,
     origin: PtrString,
 ) -> PtrT<UREncodeResult> {
+    let crypto_eth = extract_ptr_with_type!(ptr, EthSignRequest);
     let signature = unsafe { slice::from_raw_parts(signature, signature_len as usize) };
-    let eth_signature = EthSignature::new(None, signature.to_vec(), Some(recover_c_char(origin)));
+    let eth_signature = EthSignature::new(
+        crypto_eth.get_request_id(),
+        signature.to_vec(),
+        Some(recover_c_char(origin)),
+    );
     match eth_signature.try_into() {
         Err(e) => UREncodeResult::from(e).c_ptr(),
         Ok(v) => UREncodeResult::encode(
