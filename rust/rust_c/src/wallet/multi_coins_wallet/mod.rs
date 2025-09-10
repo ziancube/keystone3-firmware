@@ -1,5 +1,5 @@
 pub mod aptos;
-pub mod arconnect;
+//pub mod arconnect;
 pub mod backpack;
 pub mod bitget;
 mod imtoken;
