@@ -82,6 +82,7 @@ pub extern "C" fn get_connect_metamask_ur_dynamic(
     public_keys: PtrT<CSliceFFI<ExtendedPublicKey>>,
     fragment_max_length_default: usize,
     fragment_max_length_other: usize,
+    wallet_name: PtrString,
 ) -> *mut UREncodeResult {
     if master_fingerprint_length != 4 {
         return UREncodeResult::from(URError::UrEncodeError(format!(
@@ -98,35 +99,35 @@ pub extern "C" fn get_connect_metamask_ur_dynamic(
     unsafe {
         let keys = recover_c_array(public_keys);
         match account_type {
-            ETHAccountType::LedgerLive => {
-                let extended_public_keys = keys
-                    .iter()
-                    .map(|v: &ExtendedPublicKey| {
-                        derive_extend_public_key(&recover_c_char(v.xpub), &String::from("m/0/0"))
-                            .map(|e| e.to_string())
-                    })
-                    .collect::<Result<Vec<String>, KeystoreError>>();
+            // ETHAccountType::LedgerLive => {
+            //     let extended_public_keys = keys
+            //         .iter()
+            //         .map(|v: &ExtendedPublicKey| {
+            //             derive_extend_public_key(&recover_c_char(v.xpub), &String::from("m/0/0"))
+            //                 .map(|e| e.to_string())
+            //         })
+            //         .collect::<Result<Vec<String>, KeystoreError>>();
 
-                match extended_public_keys {
-                    Ok(value) => {
-                        let result =
-                            app_wallets::metamask::generate_ledger_live_account(mfp, &value);
-                        match result.map(|v| v.try_into()) {
-                            Ok(v) => match v {
-                                Ok(data) => UREncodeResult::encode(
-                                    data,
-                                    CryptoAccount::get_registry_type().get_type(),
-                                    fragment_max_length_default,
-                                )
-                                .c_ptr(),
-                                Err(e) => UREncodeResult::from(e).c_ptr(),
-                            },
-                            Err(e) => UREncodeResult::from(e).c_ptr(),
-                        }
-                    }
-                    Err(e) => UREncodeResult::from(e).c_ptr(),
-                }
-            }
+            //     match extended_public_keys {
+            //         Ok(value) => {
+            //             let result =
+            //                 app_wallets::metamask::generate_ledger_live_account(mfp, &value);
+            //             match result.map(|v| v.try_into()) {
+            //                 Ok(v) => match v {
+            //                     Ok(data) => UREncodeResult::encode(
+            //                         data,
+            //                         CryptoAccount::get_registry_type().get_type(),
+            //                         fragment_max_length_default,
+            //                     )
+            //                     .c_ptr(),
+            //                     Err(e) => UREncodeResult::from(e).c_ptr(),
+            //                 },
+            //                 Err(e) => UREncodeResult::from(e).c_ptr(),
+            //             }
+            //         }
+            //         Err(e) => UREncodeResult::from(e).c_ptr(),
+            //     }
+            // }
             _ => {
                 let key = keys.first().ok_or(RustCError::InvalidXPub);
                 match key {
@@ -135,7 +136,7 @@ pub extern "C" fn get_connect_metamask_ur_dynamic(
                             mfp,
                             &recover_c_char(k.xpub),
                             account_type.into(),
-                            None,
+                            Some(recover_c_char(wallet_name)),
                         );
                         match result.map(|v| v.try_into()) {
                             Ok(v) => match v {
@@ -171,6 +172,7 @@ pub extern "C" fn get_connect_metamask_ur_unlimited(
         public_keys,
         FRAGMENT_UNLIMITED_LENGTH,
         FRAGMENT_UNLIMITED_LENGTH,
+        core::ptr::null_mut(),
     )
 }
 
@@ -180,6 +182,7 @@ pub extern "C" fn get_connect_metamask_ur(
     master_fingerprint_length: uint32_t,
     account_type: ETHAccountType,
     public_keys: PtrT<CSliceFFI<ExtendedPublicKey>>,
+    wallet_name: PtrString,
 ) -> *mut UREncodeResult {
     get_connect_metamask_ur_dynamic(
         master_fingerprint,
@@ -188,5 +191,6 @@ pub extern "C" fn get_connect_metamask_ur(
         public_keys,
         FRAGMENT_MAX_LENGTH_DEFAULT,
         240,
+        wallet_name,
     )
 }
