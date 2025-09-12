@@ -43,9 +43,13 @@ use crate::common::errors::RustCError;
 use crate::common::ffi::CSliceFFI;
 use crate::common::structs::{ExtendedPublicKey, Response};
 use crate::common::types::{Ptr, PtrBytes, PtrString, PtrT, PtrUR};
-use crate::common::ur::{UREncodeResult, FRAGMENT_MAX_LENGTH_DEFAULT, FRAGMENT_UNLIMITED_LENGTH};
+use crate::common::ur::{
+    QRCodeType, UREncodeResult, URParseResult, ViewType, FRAGMENT_MAX_LENGTH_DEFAULT,
+    FRAGMENT_UNLIMITED_LENGTH,
+};
 use crate::common::utils::{recover_c_array, recover_c_char};
 use crate::{extract_array, extract_ptr_with_type};
+use ur_registry::crypto_psbt::CryptoPSBT;
 
 #[repr(C)]
 pub enum ETHAccountType {
@@ -62,6 +66,12 @@ impl From<ETHAccountType> for ETHAccountTypeApp {
             ETHAccountType::LedgerLegacy => Self::LedgerLegacy,
         }
     }
+}
+
+#[no_mangle]
+pub extern "C" fn test_get_crypto_psbt() -> *mut URParseResult {
+    let psbt = CryptoPSBT::new(hex::decode("70736274ff01005202000000016d41e6873468f85aff76d7709a93b47180ea0784edaac748228d2c474396ca550000000000fdffffff01a00f0000000000001600146623828c1f87be7841a9b1cc360d38ae0a8b6ed0000000000001011f6817000000000000160014d0c4a3ef09e997b6e99e397e518fe3e41a118ca1220602e7ab2537b5d49e970309aae06e9e49f36ce1c9febbd44ec8e0d1cca0b4f9c3191873c5da0a54000080010000800000008000000000000000000000").unwrap());
+    URParseResult::single(ViewType::BtcTx, QRCodeType::CryptoPSBT, psbt).c_ptr()
 }
 
 #[no_mangle]
