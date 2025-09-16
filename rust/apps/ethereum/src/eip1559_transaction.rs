@@ -1,4 +1,6 @@
-use crate::normalizer::{normalize_price, normalize_value};
+use crate::normalizer::{
+    normalize_price, normalize_price_in_wei, normalize_value, normalize_value_in_wei,
+};
 use crate::structs::TransactionAction;
 use crate::traits::BaseTransaction;
 use crate::{impl_base_transaction, Bytes};
@@ -65,15 +67,19 @@ impl From<EIP1559Transaction> for ParsedEIP1559Transaction {
         Self {
             chain_id: value.chain_id,
             nonce: value.nonce.as_u32(),
-            max_priority_fee_per_gas: normalize_price(value.max_priority_fee_per_gas.as_u64()),
-            max_fee_per_gas: normalize_price(value.max_fee_per_gas.as_u64()),
+            max_priority_fee_per_gas: normalize_price_in_wei(
+                value.max_priority_fee_per_gas.as_u64(),
+            ),
+            max_fee_per_gas: normalize_price_in_wei(value.max_fee_per_gas.as_u64()),
             gas_limit: value.gas_limit.to_string(),
             to: format!("0x{}", hex::encode(value.get_to())),
-            value: normalize_value(value.value),
+            value: normalize_value_in_wei(value.value),
             input: hex::encode(value.input),
-            max_txn_fee: normalize_value(value.max_fee_per_gas.mul(value.gas_limit)),
-            max_priority: normalize_value(value.max_priority_fee_per_gas.mul(value.gas_limit)),
-            max_fee: normalize_value(value.max_fee_per_gas.mul(value.gas_limit)),
+            max_txn_fee: normalize_value_in_wei(value.max_fee_per_gas.mul(value.gas_limit)),
+            max_priority: normalize_value_in_wei(
+                value.max_priority_fee_per_gas.mul(value.gas_limit),
+            ),
+            max_fee: normalize_value_in_wei(value.max_fee_per_gas.mul(value.gas_limit)),
         }
     }
 }

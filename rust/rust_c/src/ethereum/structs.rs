@@ -34,6 +34,7 @@ pub struct CParsedEthereumTransaction {
     pub max_fee_per_gas: PtrString,
     pub max_priority_fee_per_gas: PtrString,
     pub chain_id: u64,
+    pub tx_type: u8,
 }
 
 impl From<app_ethereum::structs::ParsedEthereumTransaction> for CParsedEthereumTransaction {
@@ -55,6 +56,7 @@ impl From<app_ethereum::structs::ParsedEthereumTransaction> for CParsedEthereumT
                 .map(convert_c_char)
                 .unwrap_or(null_mut()),
             chain_id: tx.chain_id,
+            tx_type: tx.tx_type,
         }
     }
 }
