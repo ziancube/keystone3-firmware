@@ -21,6 +21,7 @@ mod common;
 pub mod companion_app;
 pub mod core_wallet;
 pub mod keplr;
+pub mod keypal;
 pub mod keystone;
 pub mod keystone_connect;
 pub mod metamask;

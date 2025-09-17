@@ -16,6 +16,7 @@ pub mod xbull;
 pub mod xrp_toolkit;
 
 pub mod core_wallet;
+pub mod keypal;
 pub mod thor_wallet;
 
 use alloc::format;
