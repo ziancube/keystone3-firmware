@@ -5,6 +5,7 @@ use crate::common::ur::{UREncodeResult, FRAGMENT_MAX_LENGTH_DEFAULT};
 use crate::common::utils::{convert_c_char, recover_c_char};
 use crate::extract_ptr_with_type;
 use alloc::format;
+use alloc::slice;
 use alloc::string::ToString;
 use app_solana::errors::SolanaError;
 use app_solana::parse_message;
@@ -92,6 +93,33 @@ pub extern "C" fn solana_parse_tx(ptr: PtrUR) -> PtrT<TransactionParseResult<Dis
 }
 
 #[no_mangle]
+pub extern "C" fn solana_parse_tx_raw(ptr: PtrUR) -> PtrString {
+    let solan_sign_reqeust = extract_ptr_with_type!(ptr, SolSignRequest);
+    let tx_hex = solan_sign_reqeust.get_sign_data();
+    convert_c_char(hex::encode(tx_hex))
+}
+
+#[no_mangle]
+pub extern "C" fn solana_ur_encode_signature(
+    ptr: PtrUR,
+    signature: PtrBytes,
+    signature_len: u32,
+) -> PtrT<UREncodeResult> {
+    let crypto_sol = extract_ptr_with_type!(ptr, SolSignRequest);
+    let signature = unsafe { slice::from_raw_parts(signature, signature_len as usize) };
+    let sol_signature = SolSignature::new(crypto_sol.get_request_id(), signature.to_vec());
+    match sol_signature.try_into() {
+        Err(e) => UREncodeResult::from(e).c_ptr(),
+        Ok(v) => UREncodeResult::encode(
+            v,
+            SolSignature::get_registry_type().get_type(),
+            FRAGMENT_MAX_LENGTH_DEFAULT,
+        )
+        .c_ptr(),
+    }
+}
+
+#[no_mangle]
 pub extern "C" fn solana_sign_tx(
     ptr: PtrUR,
     seed: PtrBytes,
@@ -142,7 +170,12 @@ pub extern "C" fn sol_get_path(ptr: PtrUR) -> PtrString {
     let sol_sign_request = extract_ptr_with_type!(ptr, SolSignRequest);
     let derivation_path = sol_sign_request.get_derivation_path();
     if let Some(path) = derivation_path.get_path() {
-        return convert_c_char(path);
+        let formatted_path = if path.starts_with("m/") {
+            path
+        } else {
+            format!("m/{}", path)
+        };
+        return convert_c_char(formatted_path);
     }
     convert_c_char("".to_string())
 }
