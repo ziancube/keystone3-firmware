@@ -100,6 +100,13 @@ pub extern "C" fn solana_parse_tx_raw(ptr: PtrUR) -> PtrString {
 }
 
 #[no_mangle]
+pub extern "C" fn solana_parse_chain_id(ptr: PtrUR) -> PtrString {
+    let solan_sign_reqeust = extract_ptr_with_type!(ptr, SolSignRequest);
+    let chain_id = solan_sign_reqeust.get_chain_id();
+    convert_c_char(chain_id.unwrap_or_default().to_string())
+}
+
+#[no_mangle]
 pub extern "C" fn solana_ur_encode_signature(
     ptr: PtrUR,
     signature: PtrBytes,
