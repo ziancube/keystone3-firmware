@@ -99,7 +99,7 @@ pub extern "C" fn tron_parse_keystone_path(
                     return SimpleResponse::from(e).simple_c_ptr();
                 },
                 |res| {
-                    SimpleResponse::success(convert_c_char(hex::encode(res.hd_path)) as *mut c_char)
+                    SimpleResponse::success(convert_c_char(res.hd_path) as *mut c_char)
                         .simple_c_ptr()
                 },
             )
