@@ -27,7 +27,7 @@ use ur_registry::pb::protoc::{LatestBlock, Payload, SignTransaction};
 #[derive(Debug, Clone)]
 pub struct WrappedTron {
     pub(crate) tron_tx: Transaction,
-    pub(crate) hd_path: String,
+    pub hd_path: String,
     pub(crate) extended_pubkey: String,
     pub(crate) xfp: String,
     pub(crate) token: String,
@@ -69,6 +69,18 @@ impl WrappedTron {
             return Ok(());
         }
         Err(TronError::NoMyInputs)
+    }
+
+    pub fn raw_tx_bytes(&self) -> Result<Vec<u8>> {
+        let raw_data =
+            &self
+                .tron_tx
+                .raw_data
+                .to_owned()
+                .ok_or(TronError::InvalidRawTxCryptoBytes(
+                    "empty raw data".to_string(),
+                ))?;
+        Ok(raw_data.encode_to_vec())
     }
 
     pub fn signature_hash(&self) -> Result<Vec<u8>> {
@@ -311,6 +323,54 @@ impl WrappedTron {
         }
     }
 
+    pub fn from_only_payload(payload: Payload) -> Result<Self> {
+        let sign_tx_content: Result<SignTransaction> = match payload.content {
+            Some(protoc::payload::Content::SignTx(sign_tx_content)) => Ok(sign_tx_content),
+            _ => {
+                return Err(TronError::InvalidRawTxCryptoBytes(format!(
+                    "invalid payload content {:?}",
+                    payload.content
+                )));
+            }
+        };
+        let content: SignTransaction = sign_tx_content?;
+        let tx = &content
+            .transaction
+            .ok_or(TronError::InvalidRawTxCryptoBytes(
+                "empty transaction field for payload content".to_string(),
+            ))?;
+        let mut token_short_name: Option<String> = None;
+        let mut divider = DIVIDER;
+        match tx {
+            TronTx(tx) => {
+                if let Some(value) = tx.to_owned().r#override {
+                    token_short_name = Some(value.token_short_name);
+                    divider = 10u64.pow(value.decimals as u32) as f64;
+                }
+                let tron_tx = if tx.contract_address.is_empty() {
+                    Self::build_transfer_tx(tx)
+                } else {
+                    Self::generate_trc20_tx(tx)
+                }?;
+                Ok(Self {
+                    hd_path: content.hd_path,
+                    extended_pubkey: "".to_string(),
+                    tron_tx,
+                    xfp: payload.xfp,
+                    token: tx.token.to_string(),
+                    contract_address: tx.contract_address.to_string(),
+                    from: tx.from.to_string(),
+                    to: tx.to.to_string(),
+                    value: tx.value.to_string(),
+                    divider,
+                    token_short_name,
+                })
+            }
+            _ => Err(TronError::InvalidRawTxCryptoBytes(
+                "invalid transaction type".to_string(),
+            )),
+        }
+    }
     pub fn format_amount(&self) -> Result<String> {
         let value = f64::from_str(self.value.as_str())?;
         let unit = self.format_unit()?;

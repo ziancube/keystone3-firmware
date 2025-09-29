@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 use super::errors::ErrorCodes;
-use super::errors::RustCError;
+use super::errors::{KeystoneError, RustCError};
 use alloc::boxed::Box;
 use alloc::string::{String, ToString};
 use core::ptr::null_mut;

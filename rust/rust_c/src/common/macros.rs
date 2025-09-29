@@ -352,6 +352,11 @@ macro_rules! impl_simple_new_error {
                 }
             }
         }
+        impl<$t> From<KeystoneError> for $name<$t> {
+            fn from(value: KeystoneError) -> Self {
+                Self::error(ErrorCodes::from(&value), value.to_string())
+            }
+        }
         impl<$t> From<KeystoreError> for $name<$t> {
             fn from(value: KeystoreError) -> Self {
                 Self::error(ErrorCodes::from(&value), value.to_string())

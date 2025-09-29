@@ -34,6 +34,10 @@ pub fn sign_raw_tx(
     tx.sign(seed)
 }
 
+pub fn get_wrapped_tron_tx(raw_tx: protoc::Payload) -> Result<WrappedTron> {
+    return WrappedTron::from_only_payload(raw_tx);
+}
+
 pub fn parse_raw_tx(raw_tx: protoc::Payload, context: keystone::ParseContext) -> Result<ParsedTx> {
     let tx_data = WrappedTron::from_payload(raw_tx, &context)?;
     tx_data.parse()

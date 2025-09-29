@@ -9,6 +9,7 @@ use crate::common::utils::{convert_c_char, recover_c_char};
 use alloc::boxed::Box;
 use alloc::slice;
 use cty::c_char;
+use hex;
 use structs::DisplayTron;
 
 #[no_mangle]
@@ -48,6 +49,58 @@ pub extern "C" fn tron_parse_keystone(
                             .c_ptr()
                         },
                     )
+                },
+            )
+        },
+    )
+}
+#[no_mangle]
+pub extern "C" fn tron_parse_keystone_raw(
+    ptr: PtrUR,
+    ur_type: QRCodeType,
+) -> *mut SimpleResponse<c_char> {
+    keystone::build_payload(ptr, ur_type).map_or_else(
+        |e| {
+            return SimpleResponse::from(e).simple_c_ptr();
+        },
+        |payload| {
+            app_tron::get_wrapped_tron_tx(payload).map_or_else(
+                |e| SimpleResponse::from(e).simple_c_ptr(),
+                |res| {
+                    let tx_bytes = match res.raw_tx_bytes() {
+                        Ok(bytes) => {
+                            return SimpleResponse::success(
+                                convert_c_char(hex::encode(bytes)) as *mut c_char
+                            )
+                            .simple_c_ptr();
+                        }
+                        Err(e) => {
+                            return SimpleResponse::from(e).simple_c_ptr();
+                        }
+                    };
+                },
+            )
+        },
+    )
+}
+
+#[no_mangle]
+pub extern "C" fn tron_parse_keystone_path(
+    ptr: PtrUR,
+    ur_type: QRCodeType,
+) -> *mut SimpleResponse<c_char> {
+    keystone::build_payload(ptr, ur_type).map_or_else(
+        |e| {
+            return SimpleResponse::from(e).simple_c_ptr();
+        },
+        |payload| {
+            app_tron::get_wrapped_tron_tx(payload).map_or_else(
+                |e| {
+                    return SimpleResponse::from(e).simple_c_ptr();
+                },
+                |res| {
+                    SimpleResponse::success(convert_c_char(hex::encode(res.hd_path)) as *mut c_char)
+                        .simple_c_ptr()
                 },
             )
         },
