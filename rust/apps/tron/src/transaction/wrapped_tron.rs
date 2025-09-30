@@ -26,7 +26,7 @@ use ur_registry::pb::protoc::{LatestBlock, Payload, SignTransaction};
 
 #[derive(Debug, Clone)]
 pub struct WrappedTron {
-    pub(crate) tron_tx: Transaction,
+    pub tron_tx: Transaction,
     pub hd_path: String,
     pub(crate) extended_pubkey: String,
     pub(crate) xfp: String,
@@ -69,6 +69,10 @@ impl WrappedTron {
             return Ok(());
         }
         Err(TronError::NoMyInputs)
+    }
+
+    pub fn encode_to_vec(&self) -> Vec<u8> {
+        self.tron_tx.encode_to_vec()
     }
 
     pub fn raw_tx_bytes(&self) -> Result<Vec<u8>> {

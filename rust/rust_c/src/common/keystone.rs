@@ -123,6 +123,48 @@ pub fn build_check_result(
     }
 }
 
+pub fn build_sign_result_with_raw(
+    payload: Payload,
+    raw_tx: String,
+    tx_id: String,
+    cold_version: i32,
+) -> *mut UREncodeResult {
+    let data = Payload {
+        content: Some(payload::Content::SignTxResult(SignTransactionResult {
+            sign_id: match payload.content {
+                Some(payload::Content::SignTx(sign_tx_content)) => sign_tx_content.sign_id,
+                _ => 0.to_string(),
+            },
+            tx_id,
+            raw_tx,
+        })),
+        r#type: PbType::SignTxResult.into(),
+        xfp: payload.xfp,
+    };
+    let base = Base {
+        data: Some(data),
+        version: 1,
+        content: Some(VersionContent::ColdVersion(cold_version)),
+        description: DESCRIPTION.to_string(),
+        device_type: DEVICE_TYPE.to_string(),
+    };
+    let data = serialize_protobuf(base);
+    let result =
+        zip(&data).map_err(|_| KeystoneError::ProtobufError("zip bytes failed".to_string()));
+    match result.map(|v| KeystoneSignResult::new(v).try_into()) {
+        Ok(v) => match v {
+            Ok(data) => UREncodeResult::encode(
+                data,
+                KeystoneSignResult::get_registry_type().get_type(),
+                FRAGMENT_MAX_LENGTH_DEFAULT,
+            )
+            .c_ptr(),
+            Err(e) => UREncodeResult::from(e).c_ptr(),
+        },
+        Err(e) => UREncodeResult::from(e).c_ptr(),
+    }
+}
+
 pub fn build_sign_result(
     ptr: PtrUR,
     ur_type: QRCodeType,

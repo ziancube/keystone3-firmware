@@ -11,7 +11,7 @@ use ur_registry::pb::protoc::{payload, Account, Base, Coin, Payload};
 
 use crate::DEVICE_TYPE;
 
-pub const DESCRIPTION: &str = "keystone qrcode";
+pub const DESCRIPTION: &str = "keypalpro qrcode";
 
 pub struct AccountConfig {
     pub hd_path: String,
