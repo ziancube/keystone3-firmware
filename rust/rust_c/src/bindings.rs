@@ -7,4 +7,5 @@ extern "C" {
 
 extern "C" {
     pub fn GenerateTRNGRandomness(randomness: *mut u8, len: u8) -> i32;
+    pub fn log_simple_message(tag: *mut cty::c_char, msg: *mut cty::c_char);
 }
