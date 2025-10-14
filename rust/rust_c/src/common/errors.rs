@@ -38,6 +38,7 @@ use app_tron::errors::TronError;
 use app_xrp::errors::XRPError;
 #[cfg(feature = "zcash")]
 use app_zcash::errors::ZcashError;
+use crate::scp::errors::ScpError;
 
 #[derive(Debug, Clone)]
 #[repr(C)]
