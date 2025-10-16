@@ -70,6 +70,8 @@ use ur_registry::ton::ton_sign_request::TonSignRequest;
 #[cfg(feature = "zcash")]
 use ur_registry::zcash::zcash_pczt::ZcashPczt;
 
+use ur_registry::keypal::keypal_device_verify_request::KeypalDeviceVerifyRequest;
+
 use super::errors::{ErrorCodes, RustCError};
 use super::free::Free;
 use super::types::{PtrDecoder, PtrEncoder, PtrString, PtrUR};
@@ -291,6 +293,7 @@ pub enum ViewType {
     MultisigCryptoImportXpub,
     #[cfg(feature = "btc-only")]
     MultisigBytesImportXpub,
+    KeyPalDeviceVerifyView,
     ViewTypeUnKnown,
 }
 
@@ -358,6 +361,7 @@ pub enum QRCodeType {
     XmrOutputSignRequest,
     #[cfg(feature = "monero")]
     XmrTxUnsignedRequest,
+    KeypalDeviceVerifyRequest,
     URTypeUnKnown,
 }
 
@@ -425,6 +429,7 @@ impl QRCodeType {
             #[cfg(feature = "avalanche")]
             InnerURType::AvaxSignRequest(_) => Ok(QRCodeType::AvaxSignRequest),
             #[cfg(not(feature = "btc-only"))]
+            InnerURType::KeypalDeviceVerifyRequest(_) => Ok(QRCodeType::KeypalDeviceVerifyRequest),
             InnerURType::QRHardwareCall(_) => Ok(QRCodeType::QRHardwareCall),
             _ => Err(URError::NotSupportURTypeError(value.get_type_str())),
         }
@@ -779,6 +784,9 @@ pub fn decode_ur(ur: String) -> URParseResult {
         QRCodeType::AvaxSignRequest => _decode_ur::<AvaxSignRequest>(ur, ur_type),
         #[cfg(not(feature = "btc-only"))]
         QRCodeType::QRHardwareCall => _decode_ur::<QRHardwareCall>(ur, ur_type),
+        QRCodeType::KeypalDeviceVerifyRequest => {
+            _decode_ur::<KeypalDeviceVerifyRequest>(ur, ur_type)
+        }
         QRCodeType::URTypeUnKnown | QRCodeType::SeedSignerMessage => URParseResult::from(
             URError::NotSupportURTypeError("UnKnown ur type".to_string()),
         ),
@@ -885,6 +893,10 @@ fn receive_ur(ur: String, decoder: &mut KeystoneURDecoder) -> URParseMultiResult
         QRCodeType::XmrTxUnsignedRequest => _receive_ur::<XmrTxUnsigned>(ur, ur_type, decoder),
         #[cfg(feature = "avalanche")]
         QRCodeType::AvaxSignRequest => _receive_ur::<AvaxSignRequest>(ur, ur_type, decoder),
+
+        QRCodeType::KeypalDeviceVerifyRequest => {
+            _receive_ur::<KeypalDeviceVerifyRequest>(ur, ur_type, decoder)
+        }
         QRCodeType::URTypeUnKnown | QRCodeType::SeedSignerMessage => URParseMultiResult::from(
             URError::NotSupportURTypeError("UnKnown ur type".to_string()),
         ),

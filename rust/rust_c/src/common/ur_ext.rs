@@ -43,6 +43,7 @@ use ur_registry::extend::qr_hardware_call::{CallType, QRHardwareCall};
 use ur_registry::iota::iota_sign_hash_request::IotaSignHashRequest;
 #[cfg(feature = "iota")]
 use ur_registry::iota::iota_sign_request::IotaSignRequest;
+use ur_registry::keypal::keypal_device_verify_request::KeypalDeviceVerifyRequest;
 #[cfg(feature = "multi-coins")]
 use ur_registry::keystone::keystone_sign_request::KeystoneSignRequest;
 #[cfg(feature = "monero")]
@@ -381,6 +382,12 @@ impl InferViewType for QRHardwareCall {
         match self.get_call_type() {
             CallType::KeyDerivation => Ok(ViewType::KeyDerivationRequest),
         }
+    }
+}
+
+impl InferViewType for KeypalDeviceVerifyRequest {
+    fn infer(&self) -> Result<ViewType, URError> {
+        Ok(ViewType::KeyPalDeviceVerifyView)
     }
 }
 
