@@ -79,3 +79,5 @@ mod zcash;
 #[cfg(feature = "simulator")]
 #[allow(unused)]
 mod simulator;
+
+mod keypal;
