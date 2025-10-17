@@ -60,7 +60,7 @@ pub extern "C" fn tron_parse_keystone_raw(
     ptr: PtrUR,
     ur_type: QRCodeType,
 ) -> *mut SimpleResponse<c_char> {
-    crate::log::log_message("Entering tron_parse_keystone_raw");
+    crate::clog::log_message("Entering tron_parse_keystone_raw");
     keystone::build_payload(ptr, ur_type).map_or_else(
         |e| {
             return SimpleResponse::from(e).simple_c_ptr();

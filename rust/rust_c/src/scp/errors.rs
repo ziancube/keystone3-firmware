@@ -13,12 +13,14 @@ pub enum ScpError {
     #[error("MAC not match")]
     MacNotMatch,
     #[error("Taged field parser failed: {0}")]
-    TagedFieldParserFailed(String)
+    TagedFieldParserFailed(String),
+    #[error("Invalid padding")]
+    InvalidPad,
 }
 
 impl From<UnpadError> for ScpError {
     fn from(_: UnpadError) -> Self {
-        ScpError::MacNotMatch
+        ScpError::InvalidPad
     }
 }
 

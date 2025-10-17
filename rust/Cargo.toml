@@ -116,6 +116,7 @@ num-traits = { version = "0.2.19", default-features = false }
 blake2b_simd = { version = "1.0.2", default-features = false }
 getrandom = "0.2"
 minicbor = { version = "0.19", features = ["alloc"] }
+log = "0.4"
 # third party dependencies end
 
 

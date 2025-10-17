@@ -4,6 +4,10 @@ pub mod errors;
 pub(crate) mod apdu;
 pub mod scp03;
 pub mod scp11;
+pub(crate) mod p256;
+
+#[cfg(test)]
+mod scp11_test;
 
 
 pub type ScpContext = PtrVoid;

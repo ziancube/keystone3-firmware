@@ -5,7 +5,7 @@
 extern crate alloc;
 
 mod bindings;
-mod log;
+mod clog;
 mod trng;
 
 #[cfg(feature = "use-allocator")]
