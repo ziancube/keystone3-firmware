@@ -4,16 +4,16 @@ use super::errors::{Result, ScpError};
 use super::apdu::APDU;
 
 extern "C" {
-    fn p256_load_sig_from_der(der: *const u8, der_len: usize, sig: *mut u8) -> i32;
+    fn p256_load_sig_from_der(der: *const u8, der_len: u32, sig: *mut u8) -> i32;
     fn p256_verify_signature(pk: *const u8, digest: *const u8, sig: *const u8) -> i32;
     fn p256_gen_keypair(sk: *mut u8, pk: *mut u8) -> i32;
     fn p256_ecdh(sk: *const u8, pk: *const u8, key: *mut u8) -> i32;
-    fn nfc_transmit_apdu(apdu: *const u8, apdu_len: usize, resp: *mut u8, resp_len: *mut usize) -> i32;
+    fn nfc_transmit_apdu(apdu: *const u8, apdu_len: u32, resp: *mut u8, resp_len: *mut u32) -> i32;
 }
 
 pub fn load_sig_from_der(der: &[u8]) -> Result<[u8; 64]> {
     let mut sig = [0u8; 64];
-    let ret = unsafe { p256_load_sig_from_der(der.as_ptr(), der.len(), sig.as_mut_ptr()) };
+    let ret = unsafe { p256_load_sig_from_der(der.as_ptr(), der.len() as u32, sig.as_mut_ptr()) };
     if ret != 0 {
         return Err(ScpError::FunctionFailed("p256_load_sig_from_der".into(),ret));
     }
@@ -77,9 +77,9 @@ pub fn ecdh(sk: &[u8], pk: &[u8]) -> Result<[u8; 32]> {
 pub fn transmit_apdu(apdu: APDU) -> Result<APDUResponse> {
     let apdu = apdu.to_vec();
     let mut resp = [0u8; 270];
-    let mut le = resp.len();
+    let mut le = resp.len() as u32;
     let ret = unsafe {
-        nfc_transmit_apdu(apdu.as_ptr(), apdu.len(), resp.as_mut_ptr(), &mut le as *mut usize)
+        nfc_transmit_apdu(apdu.as_ptr(), apdu.len() as u32, resp.as_mut_ptr(), &mut le as *mut u32)
     };
 
     if ret != 0 {
@@ -89,5 +89,5 @@ pub fn transmit_apdu(apdu: APDU) -> Result<APDUResponse> {
     if le == 0 {
         return Err(ScpError::InvalidLength);
     }
-    Ok(APDUResponse::try_from(resp[..le].to_vec())?)
+    Ok(APDUResponse::try_from(resp[..le as usize].to_vec())?)
 }
