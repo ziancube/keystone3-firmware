@@ -49,7 +49,7 @@ impl Free for u8 {
 }
 
 #[no_mangle]
-pub extern "C" fn create_scp_context(
+pub extern "C" fn nfc_create_scp_context(
     aid: CSliceFFI<u8>,
     sk_oce: CSliceFFI<u8>,
     cert_oce: CSliceFFI<u8>,
@@ -95,7 +95,8 @@ pub extern "C" fn create_scp_context(
     Response::success(Box::into_raw(ctx) as ScpContext)
 }
 
-pub extern "C" fn open_secure_channel(ctx: ScpContext, host_id: PtrString) -> SimpleResponse<u8> {
+#[no_mangle]
+pub extern "C" fn nfc_open_secure_channel(ctx: ScpContext, host_id: PtrString) -> SimpleResponse<u8> {
     if ctx.is_null() || host_id.is_null() {
         return SimpleResponse::from(ScpError::InvalidSession);
     }
@@ -121,7 +122,8 @@ pub extern "C" fn open_secure_channel(ctx: ScpContext, host_id: PtrString) -> Si
     }
 }
 
-pub extern "C" fn reset_wallet(ctx: ScpContext) -> SimpleResponse<u8> {
+#[no_mangle]
+pub extern "C" fn nfc_reset_wallet(ctx: ScpContext) -> SimpleResponse<u8> {
     if ctx.is_null() {
         return SimpleResponse::from(ScpError::InvalidSession);
     }
@@ -137,7 +139,8 @@ pub extern "C" fn reset_wallet(ctx: ScpContext) -> SimpleResponse<u8> {
     }
 }
 
-pub extern "C" fn is_pin_set(ctx: ScpContext, exist: *mut u32) -> SimpleResponse<u8> {
+#[no_mangle]
+pub extern "C" fn nfc_is_pin_set(ctx: ScpContext, exist: *mut u32) -> SimpleResponse<u8> {
     if ctx.is_null() {
         return SimpleResponse::from(ScpError::InvalidSession);
     }
@@ -162,7 +165,8 @@ pub extern "C" fn is_pin_set(ctx: ScpContext, exist: *mut u32) -> SimpleResponse
     }
 }
 
-pub extern "C" fn reset_pin(ctx: ScpContext, pin: PtrString) -> SimpleResponse<u8> {
+#[no_mangle]
+pub extern "C" fn nfc_reset_pin(ctx: ScpContext, pin: PtrString) -> SimpleResponse<u8> {
     if ctx.is_null() {
         return SimpleResponse::from(ScpError::InvalidSession);
     }
@@ -192,7 +196,8 @@ pub extern "C" fn reset_pin(ctx: ScpContext, pin: PtrString) -> SimpleResponse<u
     }
 }
 
-pub extern "C" fn get_pin_retry_times(ctx: ScpContext, count: *mut u32) -> SimpleResponse<u8> {
+#[no_mangle]
+pub extern "C" fn nfc_get_pin_retry_times(ctx: ScpContext, count: *mut u32) -> SimpleResponse<u8> {
     if ctx.is_null() {
         return SimpleResponse::from(ScpError::InvalidSession);
     }
@@ -222,7 +227,8 @@ pub extern "C" fn get_pin_retry_times(ctx: ScpContext, count: *mut u32) -> Simpl
     }
 }
 
-pub extern "C" fn verify_pin(
+#[no_mangle]
+pub extern "C" fn nfc_verify_pin(
     ctx: ScpContext,
     pin: PtrString,
     count: *mut u32,
@@ -262,7 +268,8 @@ pub extern "C" fn verify_pin(
     }
 }
 
-fn change_pin(
+#[no_mangle]
+pub extern "C" fn nfc_change_pin(
     ctx: ScpContext,
     old_pin: PtrString,
     new_pin: PtrString,
@@ -314,7 +321,8 @@ fn change_pin(
     }
 }
 
-fn write_data(ctx: ScpContext, slot: u8, data: CSliceFFI<u8>) -> SimpleResponse<u8> {
+#[no_mangle]
+pub extern "C" fn nfc_write_data(ctx: ScpContext, slot: u8, data: CSliceFFI<u8>) -> SimpleResponse<u8> {
     if ctx.is_null() {
         return SimpleResponse::from(ScpError::InvalidSession);
     }
@@ -337,7 +345,8 @@ fn write_data(ctx: ScpContext, slot: u8, data: CSliceFFI<u8>) -> SimpleResponse<
     }
 }
 
-fn read_data(ctx: ScpContext, slot: u8) -> Response<VecFFI<u8>> {
+#[no_mangle]
+pub extern "C" fn nfc_read_data(ctx: ScpContext, slot: u8) -> Response<VecFFI<u8>> {
     if ctx.is_null() {
         return Response::from(ScpError::InvalidSession);
     }
@@ -366,7 +375,8 @@ fn read_data(ctx: ScpContext, slot: u8) -> Response<VecFFI<u8>> {
     }
 }
 
-fn delete_data(ctx: ScpContext, slot: u8) -> SimpleResponse<VecFFI<u8>> {
+#[no_mangle]
+pub extern "C" fn nfc_delete_data(ctx: ScpContext, slot: u8) -> SimpleResponse<VecFFI<u8>> {
     if ctx.is_null() {
         return SimpleResponse::from(ScpError::InvalidSession);
     }
@@ -386,7 +396,8 @@ fn delete_data(ctx: ScpContext, slot: u8) -> SimpleResponse<VecFFI<u8>> {
     }
 }
 
-fn is_stored_in_slot(ctx: ScpContext, slot: u8, stored: *mut u32) -> SimpleResponse<u8> {
+#[no_mangle]
+pub extern "C" fn nfc_is_stored_in_slot(ctx: ScpContext, slot: u8, stored: *mut u32) -> SimpleResponse<u8> {
     if ctx.is_null() {
         return SimpleResponse::from(ScpError::InvalidSession);
     }
