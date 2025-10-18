@@ -150,4 +150,4 @@ pub extern "C" fn free_rust_value(any_ptr: *mut c_void) {
 // make_free_method!(TransactionParseResult<DisplaySuiIntentMessage>);
 // make_free_method!(TransactionParseResult<DisplayAptosTx>);
 // make_free_method!(TransactionCheckResult);
-make_free_method!(VecFFI<u8>);
+// make_free_method!(VecFFI<u8>);

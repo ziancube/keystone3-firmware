@@ -7,6 +7,7 @@ edition = "2021"
 
 [dependencies]
 #external
+bytes = {version = "1.4.0", default-features = false}
 cty = { workspace = true }
 cstr_core = { workspace = true }
 getrandom = { workspace = true, features = ["custom"] }
@@ -25,6 +26,7 @@ sha1 = { workspace = true }
 aes = { workspace = true }
 cbc = { workspace = true }
 cipher = { workspace = true }
+cmac = { workspace = true }
 minicbor = { workspace = true }
 #keystone owned
 sim_qr_reader = { workspace = true, optional = true }
@@ -35,6 +37,7 @@ zcash_vendor = { workspace = true, optional = true }
 ed25519-bip32-core = { workspace = true }
 app_utils = { workspace = true }
 rust_tools = { workspace = true }
+log = {workspace = true}
 sui-types = { git = "https://github.com/KeystoneHQ/sui.git", tag = "0.1.2", package = "sui-types" }
 
 #apps
@@ -132,6 +135,10 @@ default = ["simulator-multi-coins"]
 
 [dev-dependencies]
 keystore = { path = "../keystore" }
+p256 = {version = "0.13", features=["ecdh"]}
+pcsc = "2"
+rand = "0.9"
+simple_logger = "5"
 
 [build-dependencies]
 cbindgen = "0.27.0"

@@ -4,6 +4,7 @@ use thiserror;
 use thiserror::Error;
 use ur_registry::error::URError;
 
+use crate::scp::errors::ScpError;
 #[cfg(feature = "aptos")]
 use app_aptos::errors::AptosError;
 #[cfg(feature = "arweave")]
@@ -249,6 +250,23 @@ pub enum ErrorCodes {
     IotaSignFailure,
     IotaUnexpectedEof,
     IotaInvalidField,
+
+    // Scp
+    ScpInvalidParam = 1900,
+    ScpInvalidSession,
+    ScpInvalidSignature,
+    ScpInvalidCertficate,
+    ScpInvalidLength,
+    ScpInvalidPadding,
+    ScpInvalidReceipt,
+    ScpInvalidString,
+    ScpInvalidPin,
+    ScpUnexpectedContent,
+    ScpLengthNotEnough,
+    ScpMacNotMatch,
+    ScpTagNotMatch,
+    ScpFunctionFailed,
+    ScpAPDUResponseFailed,
 }
 
 impl ErrorCodes {
@@ -589,6 +607,28 @@ impl From<&MoneroError> for ErrorCodes {
     fn from(value: &MoneroError) -> Self {
         match value {
             _ => Self::MoneroUnknownError,
+        }
+    }
+}
+
+impl From<&ScpError> for ErrorCodes {
+    fn from(value: &ScpError) -> Self {
+        match value {
+            ScpError::InvalidParam => Self::ScpInvalidParam,
+            ScpError::InvalidSession => Self::ScpInvalidSession,
+            ScpError::InvalidSignature => Self::ScpInvalidSignature,
+            ScpError::InvalidCertficate => Self::ScpInvalidCertficate,
+            ScpError::InvalidLength => Self::ScpInvalidLength,
+            ScpError::InvalidPadding => Self::ScpInvalidPadding,
+            ScpError::InvalidReceipt => Self::ScpInvalidReceipt,
+            ScpError::InvalidString(_) => Self::ScpInvalidString,
+            ScpError::InvalidPin =>  Self::ScpInvalidPin,
+            ScpError::UnexpectedContent => Self::ScpUnexpectedContent,
+            ScpError::LengthNotEnough => Self::ScpLengthNotEnough,
+            ScpError::MacNotMatch => Self::ScpMacNotMatch,
+            ScpError::TagNotMatch { want: _, get: _ } => Self::ScpTagNotMatch,
+            ScpError::FunctionFailed(_, _) => Self::ScpFunctionFailed,
+            ScpError::APDUResponseFailed(_) => Self::ScpAPDUResponseFailed,
         }
     }
 }

@@ -25,7 +25,7 @@ impl<T> From<Vec<T>> for VecFFI<T> {
     }
 }
 
-impl_simple_free!(u8);
+// impl_simple_free!(u8);
 
 impl<T: SimpleFree> SimpleFree for VecFFI<T> {
     fn free(&self) {
