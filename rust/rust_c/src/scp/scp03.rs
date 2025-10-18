@@ -1,4 +1,6 @@
 use core::cell::{Cell, RefCell};
+use alloc::vec;
+use alloc::vec::Vec;
 
 use aes;
 use aes::cipher::block_padding::{Iso7816, UnpadError};

@@ -1,6 +1,9 @@
 use core::cell::{Cell, RefCell};
 
+use crate::alloc::string::ToString;
+use alloc::vec;
 use alloc::vec::Vec;
+use alloc::string::String;
 use cryptoxide::hashing::{sha1, sha2, sha256};
 
 use log::debug;
@@ -365,7 +368,7 @@ impl<const TAG: u16> Decode for Tagged<TAG, KeyParamterReference> {
         if v > KeyParamterReference::SM2 as u8 {
             return Err(ScpError::UnexpectedContent);
         }
-        let kpr = unsafe { ::std::mem::transmute(v) };
+        let kpr = unsafe { ::core::mem::transmute(v) };
         Ok(Self { value: kpr })
     }
 }
@@ -801,7 +804,7 @@ impl Scp11 {
             counter += 1;
             let n = chunk.len();
             chunk[..n].copy_from_slice(&digest[..n]);
-        }   
+        }
         key
     }
 }

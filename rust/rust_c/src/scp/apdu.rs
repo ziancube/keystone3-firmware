@@ -1,3 +1,4 @@
+use alloc::vec::Vec;
 use core::ops::Deref;
 use super::errors::ScpError;
 use super::errors::Result;

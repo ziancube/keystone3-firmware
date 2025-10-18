@@ -1,5 +1,8 @@
 use core::ffi::c_void;
 use core::ptr::{null, null_mut};
+use alloc::vec;
+use alloc::vec::Vec;
+use alloc::boxed::Box;
 
 use bytes::{BufMut, Bytes, BytesMut};
 use sui_types::object::Data;
