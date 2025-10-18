@@ -57,6 +57,13 @@ impl APDUResponse {
     pub fn is_success(&self) -> bool {
         self.sw() == 0x9000
     }
+
+    pub fn check_sw(&self) -> Result<()> {
+        if !self.is_success() {
+            return Err(ScpError::APDUResponseFailed(self.sw()));
+        }
+        Ok(())
+    }
 }
 
 impl TryFrom<Vec<u8>> for APDUResponse {

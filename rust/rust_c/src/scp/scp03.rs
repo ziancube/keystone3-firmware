@@ -1,24 +1,30 @@
 use core::cell::{Cell, RefCell};
 
+use aes;
+use aes::cipher::block_padding::{Iso7816, UnpadError};
 use cbc::{
     self,
     cipher::{BlockDecryptMut, BlockEncryptMut, KeyInit, KeyIvInit},
 };
 use cipher::{generic_array::GenericArray, BlockEncrypt};
-use cmac::{digest::Update, Cmac, Mac};
-use aes;
-use aes::cipher::block_padding::Iso7816;
+use cmac::{Cmac, Mac};
 
 use crate::scp::apdu::EncryptedAPDUResponse;
 
-use super::apdu::{APDU, APDUResponse};
-use super::errors::{ScpError, Result};
+use super::apdu::{APDUResponse, APDU};
+use super::errors::{Result, ScpError};
 
 type AesCbcEnc = cbc::Encryptor<aes::Aes128>;
 type AesCbcDec = cbc::Decryptor<aes::Aes128>;
 type AesCmac = Cmac<aes::Aes128>;
 
-use ::log::{debug};
+use ::log::debug;
+
+impl From<UnpadError> for ScpError {
+    fn from(_: UnpadError) -> Self {
+        ScpError::InvalidPadding
+    }
+}
 
 pub struct Scp03 {
     pub counter: Cell<u32>,
@@ -54,7 +60,7 @@ impl Scp03 {
         let mut data = apdu.data.unwrap_or_default();
         data.extend(&mac);
         apdu.data = Some(data);
-        
+
         apdu
     }
 
@@ -77,18 +83,17 @@ impl Scp03 {
         if mac1 != mac2 {
             return Err(ScpError::MacNotMatch);
         }
-        
+
         let encrypted = encrypt_resp.data().unwrap();
         // decrypt data
         let mut data = self.decrypt(encrypted)?;
         // append [sw1, sw2]
         let len = encrypt_resp.len();
-        data.extend(&encrypt_resp[(len-2)..]);
+        data.extend(&encrypt_resp[(len - 2)..]);
         Ok(APDUResponse::try_from(data)?)
     }
 
     fn encrypt(&self, data: &[u8]) -> Vec<u8> {
-
         debug!("encrypt data: {}", hex::encode(data));
         AesCbcEnc::new(&self.s_enc.into(), &self.icv(IcvType::CEncryption).into())
             .encrypt_padded_vec_mut::<Iso7816>(&data)
@@ -140,7 +145,7 @@ impl Scp03 {
         let mac = <AesCmac as Mac>::new(&self.s_rmac.into())
             .chain_update(&mac_chain[..]) // mac chain
             .chain_update(&resp.data().unwrap()) // encrypted
-            .chain_update(&resp[(le-2)..]) // sw
+            .chain_update(&resp[(le - 2)..]) // sw
             .finalize();
 
         // [u8;16] -> [u8; 8] resize mac
@@ -157,7 +162,7 @@ impl Scp03 {
         debug!("icv key: {}", hex::encode(&self.s_enc));
         debug!("icv input: {}", hex::encode(&block));
         let mut block = GenericArray::from(block);
-        aes::Aes128::new(&self.s_enc.into()).encrypt_block(& mut block);
+        aes::Aes128::new(&self.s_enc.into()).encrypt_block(&mut block);
         block.into()
     }
 }

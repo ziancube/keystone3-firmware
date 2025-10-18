@@ -9,8 +9,9 @@ use crate::apdu;
 use crate::scp::apdu::APDUResponse;
 
 use super::apdu::APDU;
-use super::p256;
+use super::binding;
 use super::scp03::Scp03;
+use super::errors::*;
 
 use aes;
 use bytes::{Buf, BufMut, Bytes, BytesMut, TryGetError};
@@ -20,36 +21,21 @@ use thiserror::Error;
 
 type AesCmac = Cmac<aes::Aes128>;
 
-#[derive(Error, Debug)]
-pub enum TaggedError {
-    #[error("Tag not match, want: {want}, got: {got}")]
-    TagNotMatch { want: u16, got: u16 },
-    #[error("Length not enough")]
-    LengthNotEnough,
-    #[error("Unexpected length")]
-    UnexpectedLength,
-    #[error("Unexpected content")]
-    UnexpectedContent,
-    #[error("Invalid string {0}")]
-    InvalidString(String),
-}
-
-impl From<TryGetError> for TaggedError {
+impl From<TryGetError> for ScpError {
     fn from(_: TryGetError) -> Self {
-        TaggedError::LengthNotEnough
+        ScpError::LengthNotEnough
     }
 }
 
-type TaggedResult<T> = core::result::Result<T, TaggedError>;
 
 pub trait Decode: Sized {
-    fn decode(buf: &mut Bytes) -> TaggedResult<Self>;
+    fn decode(buf: &mut Bytes) -> Result<Self>;
 }
 pub trait Encode: Sized {
     fn encode(&self, buf: &mut BytesMut);
 }
 
-pub fn decode<T>(buf: &mut Bytes) -> TaggedResult<T>
+pub fn decode<T>(buf: &mut Bytes) -> Result<T>
 where
     T: Decode,
 {
@@ -65,7 +51,7 @@ where
     buf.freeze()
 }
 
-pub fn try_decode<const TAG: u16, T>(buf: &mut Bytes) -> TaggedResult<Option<Tagged<TAG, T>>>
+pub fn try_decode<const TAG: u16, T>(buf: &mut Bytes) -> Result<Option<Tagged<TAG, T>>>
 where
     Tagged<TAG, T>: Decode,
 {
@@ -74,7 +60,7 @@ where
         0..=0xff => buf[0] as u16,
         _ => {
             if buf.remaining() < 2 {
-                return Err(TaggedError::LengthNotEnough);
+                return Err(ScpError::LengthNotEnough);
             }
             u16::from_be_bytes(buf[0..2].try_into().unwrap())
         }
@@ -90,14 +76,14 @@ pub struct Tagged<const TAG: u16, T> {
     pub value: T,
 }
 
-fn decode_length(buf: &mut Bytes) -> TaggedResult<usize> {
+fn decode_length(buf: &mut Bytes) -> Result<usize> {
     let n = buf.try_get_u8()? as usize;
     match n {
         0..=127 => Ok(n as usize),
         _ => {
             let size = (n & 0x7f) as usize;
             if buf.remaining() < size {
-                return Err(TaggedError::LengthNotEnough);
+                return Err(ScpError::LengthNotEnough);
             }
             let bytes = buf.split_to(size);
             let n = bytes
@@ -127,16 +113,16 @@ fn encode_tag(tag: u16, buf: &mut BytesMut) {
         _ => buf.put_u16(tag),
     }
 }
-fn verify_tag(tag: u16, buf: &mut Bytes) -> TaggedResult<()> {
+fn verify_tag(tag: u16, buf: &mut Bytes) -> Result<()> {
     let _tag = if tag <= 0xFF {
         buf.try_get_u8()? as u16
     } else {
         buf.try_get_u16()?
     };
     if tag != _tag {
-        return Err(TaggedError::TagNotMatch {
+        return Err(ScpError::TagNotMatch {
             want: tag,
-            got: _tag,
+            get: _tag,
         });
     }
 
@@ -153,13 +139,13 @@ impl<const TAG: u16, T> Tagged<TAG, T> {
     fn encode_length(length: usize, buf: &mut BytesMut) {
         encode_length(length, buf);
     }
-    fn decode_length(buf: &mut Bytes) -> TaggedResult<usize> {
+    fn decode_length(buf: &mut Bytes) -> Result<usize> {
         decode_length(buf)
     }
     fn encode_tag(buf: &mut BytesMut) {
         encode_tag(TAG, buf);
     }
-    fn verify_tag(buf: &mut Bytes) -> TaggedResult<()> {
+    fn verify_tag(buf: &mut Bytes) -> Result<()> {
         verify_tag(TAG, buf)
     }
 }
@@ -192,11 +178,11 @@ impl<const TAG: u16, const N: usize> Encode for Tagged<TAG, [u8; N]> {
 }
 
 impl<const TAG: u16, const N: usize> Decode for Tagged<TAG, [u8; N]> {
-    fn decode(buf: &mut Bytes) -> TaggedResult<Self> {
+    fn decode(buf: &mut Bytes) -> Result<Self> {
         Self::verify_tag(buf)?;
         let size = Self::decode_length(buf)?;
         if size != N {
-            return Err(TaggedError::UnexpectedLength);
+            return Err(ScpError::InvalidLength);
         }
         let mut v = [0u8; N];
         buf.split_to(N).copy_to_slice(&mut v);
@@ -206,11 +192,11 @@ impl<const TAG: u16, const N: usize> Decode for Tagged<TAG, [u8; N]> {
 
 /// ()
 impl<const TAG: u16> Decode for Tagged<TAG, ()> {
-    fn decode(buf: &mut Bytes) -> TaggedResult<Self> {
+    fn decode(buf: &mut Bytes) -> Result<Self> {
         Self::verify_tag(buf)?;
         let size = Self::decode_length(buf)?;
         if size != 0 {
-            return Err(TaggedError::UnexpectedContent);
+            return Err(ScpError::UnexpectedContent);
         }
         Ok(Tagged { value: () })
     }
@@ -223,18 +209,18 @@ impl<const TAG: u16> Encode for Tagged<TAG, ()> {
 }
 
 /// String
-impl From<core::str::Utf8Error> for TaggedError {
+impl From<core::str::Utf8Error> for ScpError {
     fn from(value: core::str::Utf8Error) -> Self {
-        TaggedError::InvalidString(value.to_string())
+        ScpError::InvalidString(value.to_string())
     }
 }
 
 impl<const TAG: u16> Decode for Tagged<TAG, String> {
-    fn decode(buf: &mut Bytes) -> TaggedResult<Self> {
+    fn decode(buf: &mut Bytes) -> Result<Self> {
         Self::verify_tag(buf)?;
         let size = Self::decode_length(buf)?;
         if buf.remaining() < size {
-            return Err(TaggedError::LengthNotEnough);
+            return Err(ScpError::LengthNotEnough);
         }
         let bytes = buf.split_to(size);
         let value = str::from_utf8(&bytes)?.to_string();
@@ -258,14 +244,14 @@ pub enum KeyUsage {
     Agreement,
 }
 impl<const TAG: u16> Decode for Tagged<TAG, KeyUsage> {
-    fn decode(buf: &mut Bytes) -> TaggedResult<Self> {
+    fn decode(buf: &mut Bytes) -> Result<Self> {
         Self::verify_tag(buf)?;
         let size = Self::decode_length(buf)?;
         match size {
             1 => {
                 let ku = buf.try_get_u8()?;
                 if ku != 0x82 {
-                    return Err(TaggedError::UnexpectedContent);
+                    return Err(ScpError::UnexpectedContent);
                 }
                 Ok(Self {
                     value: KeyUsage::SignatureVerification,
@@ -274,13 +260,13 @@ impl<const TAG: u16> Decode for Tagged<TAG, KeyUsage> {
             2 => {
                 let ku = buf.try_get_u16()?;
                 if ku != 0x0080 {
-                    return Err(TaggedError::UnexpectedContent);
+                    return Err(ScpError::UnexpectedContent);
                 }
                 Ok(Self {
                     value: KeyUsage::Agreement,
                 })
             }
-            _ => Err(TaggedError::UnexpectedLength),
+            _ => Err(ScpError::InvalidLength),
         }
     }
 }
@@ -308,12 +294,12 @@ pub struct Date {
 }
 
 impl<const TAG: u16> Decode for Tagged<TAG, Date> {
-    fn decode(buf: &mut Bytes) -> TaggedResult<Self> {
+    fn decode(buf: &mut Bytes) -> Result<Self> {
         // `BCD` format `YYYYMMDD`
         Self::verify_tag(buf)?;
         let size = Self::decode_length(buf)?;
         if size != 4 {
-            return Err(TaggedError::UnexpectedLength);
+            return Err(ScpError::LengthNotEnough);
         }
         let mut year = 0u16;
         for _ in 0..2 {
@@ -369,15 +355,15 @@ pub enum KeyParamterReference {
 }
 
 impl<const TAG: u16> Decode for Tagged<TAG, KeyParamterReference> {
-    fn decode(buf: &mut Bytes) -> TaggedResult<Self> {
+    fn decode(buf: &mut Bytes) -> Result<Self> {
         Self::verify_tag(buf)?;
         let size = Self::decode_length(buf)?;
         if size != 1 {
-            return Err(TaggedError::UnexpectedLength);
+            return Err(ScpError::UnexpectedContent);
         }
         let v = buf.try_get_u8()?;
         if v > KeyParamterReference::SM2 as u8 {
-            return Err(TaggedError::UnexpectedContent);
+            return Err(ScpError::UnexpectedContent);
         }
         let kpr = unsafe { ::std::mem::transmute(v) };
         Ok(Self { value: kpr })
@@ -393,11 +379,11 @@ impl<const TAG: u16> Encode for Tagged<TAG, KeyParamterReference> {
 
 /// Vec<u8>
 impl<const TAG: u16> Decode for Tagged<TAG, Vec<u8>> {
-    fn decode(buf: &mut Bytes) -> TaggedResult<Self> {
+    fn decode(buf: &mut Bytes) -> Result<Self> {
         Self::verify_tag(buf)?;
         let size = Self::decode_length(buf)?;
         if size > buf.remaining() {
-            return Err(TaggedError::LengthNotEnough);
+            return Err(ScpError::LengthNotEnough);
         }
 
         let v = buf.split_to(size);
@@ -416,11 +402,11 @@ impl<const TAG: u16> Encode for Tagged<TAG, Vec<u8>> {
 
 /// Bytes
 impl<const TAG: u16> Decode for Tagged<TAG, Bytes> {
-    fn decode(buf: &mut Bytes) -> TaggedResult<Self> {
+    fn decode(buf: &mut Bytes) -> Result<Self> {
         Self::verify_tag(buf)?;
         let size = Self::decode_length(buf)?;
         if size > buf.remaining() {
-            return Err(TaggedError::LengthNotEnough);
+            return Err(ScpError::LengthNotEnough);
         }
 
         let v = buf.split_to(size);
@@ -444,7 +430,7 @@ pub struct PublicKeyData {
 }
 
 impl<const TAG: u16> Decode for Tagged<TAG, PublicKeyData> {
-    fn decode(buf: &mut Bytes) -> TaggedResult<Self> {
+    fn decode(buf: &mut Bytes) -> Result<Self> {
         Self::verify_tag(buf)?;
         _ = Self::decode_length(buf)?;
         let q = decode(buf)?;
@@ -526,7 +512,7 @@ impl Encode for Certificate {
 }
 
 impl Decode for Certificate {
-    fn decode(buf: &mut Bytes) -> TaggedResult<Self> {
+    fn decode(buf: &mut Bytes) -> Result<Self> {
         verify_tag(0x7f21, buf)?;
         _ = decode_length(buf)?;
         let sn = decode(buf)?;
@@ -580,28 +566,6 @@ impl Encode for ControlReference {
     }
 }
 
-#[derive(Error, Debug)]
-pub enum Scp11Error {
-    #[error("invalid data")]
-    InvalidData,
-    #[error("invalid certificate")]
-    InvalidCert,
-    #[error("invalid receipt")]
-    InvalidReceipt,
-    #[error("invalid session")]
-    InvalidSession,
-    #[error("invalid response {0}")]
-    InvalidResponse(String)
-}
-
-impl From<TaggedError> for Scp11Error {
-    fn from(_value: TaggedError) -> Self {
-        Scp11Error::InvalidData
-    }
-}
-
-type Scp11Result<T> = core::result::Result<T, Scp11Error>;
-
 pub struct Scp11 {
     sk_oce: [u8; 32],
     cert_oce: Certificate,
@@ -634,7 +598,7 @@ impl Scp11 {
         // ca_klcc: &[u8],
         pk_ca_klcc: &[u8],
         sd: &[u8],
-    ) -> Scp11Result<Scp11> {
+    ) -> Result<Scp11> {
         let mut buf = Bytes::copy_from_slice(oce);
         let cert_oce = decode::<Certificate>(&mut buf)?;
 
@@ -653,9 +617,13 @@ impl Scp11 {
         let digest = sha256(&unsigned);
 
         // convert der to R||S
-        let sig = p256::load_sig_from_der(sig).map_err(|_| Scp11Error::InvalidCert)?;
+        let sig = binding::load_sig_from_der(sig)?;
         // p256::verify_signature(pk, &digest, &sig).map_err(|_| Scp11Error::InvalidCert)?;
-        p256::verify_signature(&pk_ca_klcc, &digest, &sig).map_err(|_| Scp11Error::InvalidCert)?;
+
+        match binding::verify_signature(&pk_ca_klcc, &digest, &sig){
+            Err(_) => return Err(ScpError::InvalidCertficate),
+            Ok(_) => {},
+        };
 
         Ok(Scp11 {
             sk_oce: sk_oce,
@@ -682,7 +650,7 @@ impl Scp11 {
     }
 
     pub fn mutual_authenticate(&mut self, host_id: &str) -> APDU {
-        let (sk, pk) = p256::gen_keypair().unwrap();
+        let (sk, pk) = binding::gen_keypair().unwrap();
 
         let cr = ControlReference {
             scp_id_param: [0x11u8, 0x07u8].into(),
@@ -706,7 +674,7 @@ impl Scp11 {
         apdu!(0x80, 0x82, 0x18, 0x15, data: buf.to_vec())
     }
 
-    pub fn open_secure_channel(&mut self, data: &[u8]) -> Scp11Result<()> {
+    pub fn open_secure_channel(&mut self, data: &[u8]) -> Result<()> {
         // 6.5.3.1 MUTUAL AUTHENTICATE Response Data
         let mut buf = Bytes::copy_from_slice(data);
 
@@ -715,7 +683,7 @@ impl Scp11 {
 
         // complare pk.sd
         if pk_sd.value != self.cert_sd.pk.value.q.value {
-            return Err(Scp11Error::InvalidCert);
+            return Err(ScpError::InvalidCertficate);
         }
 
         self.derive_key()?;
@@ -734,7 +702,7 @@ impl Scp11 {
             .into();
 
         if receipt.value != receipt2 {
-            return Err(Scp11Error::InvalidReceipt);
+            return Err(ScpError::InvalidReceipt);
         }
 
         let client = Scp03 {
@@ -748,30 +716,27 @@ impl Scp11 {
         Ok(())
     }
 
-    pub fn encrypt_apdu(&self, apdu: APDU) -> Scp11Result<APDU> {
+    pub fn encrypt_apdu(&self, apdu: APDU) -> Result<APDU> {
         match &self.scp03 {
-            None => Err(Scp11Error::InvalidSession),
+            None => Err(ScpError::InvalidSession),
             Some(scp03) => {
                 Ok(scp03.encrypt_apdu(apdu))
             }
         }
     }
 
-    pub fn decrypt_apdu_response(&self, resp: &[u8]) -> Scp11Result<APDUResponse> {
+    pub fn decrypt_apdu_response(&self, resp: &[u8]) -> Result<APDUResponse> {
         match &self.scp03 {
-            None => Err(Scp11Error::InvalidSession),
+            None => Err(ScpError::InvalidSession),
             Some(scp03) => {
-                match scp03.decrypt_apdu_response(resp) {
-                    Err(e) => Err(Scp11Error::InvalidResponse(e.to_string())),
-                    Ok(resp) => Ok(resp)
-                }
+                scp03.decrypt_apdu_response(resp)
             }
         }
 
     }
 
-    fn derive_key(&mut self) -> Scp11Result<()> {
-        let host_id = self.host_id.as_ref().ok_or(Scp11Error::InvalidData)?;
+    fn derive_key(&mut self) -> Result<()> {
+        let host_id = self.host_id.as_ref().ok_or(ScpError::InvalidParam)?;
 
         let es = self.shses()?;
         let ss = self.shsss()?;
@@ -805,19 +770,19 @@ impl Scp11 {
         Ok(())
     }
 
-    fn shsss(&self) -> Scp11Result<[u8; 20]> {
+    fn shsss(&self) -> Result<[u8; 20]> {
         let sd_pk = self.cert_sd.pk.value.q.value.as_ref();
-        let key = p256::ecdh(&self.sk_oce, sd_pk).map_err(|_| Scp11Error::InvalidData)?;
+        let key = binding::ecdh(&self.sk_oce, sd_pk)?;
         debug!("ss session key: {}", hex::encode(&key));
         let ss = sha1(&key);
         debug!("ss: {}", hex::encode(&ss));
         Ok(ss)
     }
 
-    fn shses(&self) -> Scp11Result<[u8; 20]> {
+    fn shses(&self) -> Result<[u8; 20]> {
         let sd_pk = self.cert_sd.pk.value.q.value.as_ref();
-        let esk = self.esk.as_ref().ok_or(Scp11Error::InvalidData)?;
-        let key = p256::ecdh(esk, sd_pk).map_err(|_| Scp11Error::InvalidData)?;
+        let esk = self.esk.as_ref().ok_or(ScpError::InvalidParam)?;
+        let key = binding::ecdh(esk, sd_pk)?;
         debug!("es session key: {}", hex::encode(&key));
         let es = sha1(&key);
         debug!("es: {}", hex::encode(&es));
