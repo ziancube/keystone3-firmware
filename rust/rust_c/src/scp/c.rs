@@ -28,6 +28,7 @@ use crate::{
 };
 
 use super::errors::*;
+use crate::clog::log_message;
 
 type ScpContext = PtrVoid;
 
@@ -49,12 +50,20 @@ impl Free for u8 {
 }
 
 #[no_mangle]
+pub extern "C" fn nfc_select() {
+    log_message("enter nfc select");
+    let aid = vec![0x54, 0x50, 0x2d, 0x62, 0x61, 0x63, 0x6b, 0x75, 0x70, 0x01];
+    let apdu = apdu!(0x00, 0xa4, 0x04, 0x00, data: aid);
+    transmit_apdu(apdu);
+}
+#[no_mangle]
 pub extern "C" fn nfc_create_scp_context(
     aid: CSliceFFI<u8>,
     sk_oce: CSliceFFI<u8>,
     cert_oce: CSliceFFI<u8>,
     pk_ca_klcc: CSliceFFI<u8>,
 ) -> Response<ScpContext> {
+    log_message("enter nfc_create_scp_context");
     if sk_oce.size != 32 {
         return Response::from(ScpError::InvalidParam);
     }
