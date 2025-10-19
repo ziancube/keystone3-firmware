@@ -5,6 +5,7 @@ use alloc::boxed::Box;
 
 use bytes::Bytes;
 
+use crate::common::free::SimpleFree;
 use crate::common::types::PtrString;
 use crate::common::utils::recover_c_char;
 use crate::scp::apdu::{APDUResponse, APDU};
@@ -45,16 +46,13 @@ impl Free for ScpContext {
 impl Free for u8 {
     fn free(&self) {}
 }
+impl SimpleFree for u8 {
+    fn free(&self) {}
+}
 
 #[no_mangle]
-pub extern "C" fn free_Response_VecFFI_u8(data: *mut VecFFI<u8>) {
-    if data.is_null() {
-        return;
-    }
-    let v = unsafe {Box::from_raw(data)};
-    let _x = unsafe {
-        Vec::from_raw_parts(v.data, v.size, v.cap)
-    };
+pub extern "C" fn free_Response_VecFFI_u8(resp: Response<VecFFI<u8>>) {
+    SimpleFree::free(&resp);
 }
 
 #[no_mangle]
@@ -62,7 +60,7 @@ pub extern "C" fn nfc_select() {
     log_message("enter nfc select");
     let aid = vec![0x54, 0x50, 0x2d, 0x62, 0x61, 0x63, 0x6b, 0x75, 0x70, 0x01];
     let apdu = apdu!(0x00, 0xa4, 0x04, 0x00, data: aid);
-    transmit_apdu(apdu);
+    _ = transmit_apdu(apdu);
 }
 #[no_mangle]
 pub extern "C" fn nfc_create_scp_context(

@@ -11,6 +11,7 @@ use ur_registry::error::URError;
 
 use super::free::Free;
 use super::types::{PtrString, PtrT};
+use crate::common::free::SimpleFree;
 use crate::{
     check_and_free_ptr, free_str_ptr, impl_c_ptr, impl_new_error, impl_response, impl_simple_c_ptr,
     impl_simple_new_error, make_free_method,
@@ -146,6 +147,19 @@ impl<T> Response<T> {
         let data = Box::into_raw(Box::new(data));
         let _self = Self::new();
         Self { data, .._self }
+    }
+}
+
+impl <T: SimpleFree> SimpleFree for Response<T> {
+    fn free(&self) {
+        free_str_ptr!(self.error_message);
+        if self.data.is_null() {
+            return;
+        }
+        unsafe {
+            let x = Box::from_raw(self.data);
+            x.free();
+        }
     }
 }
 
