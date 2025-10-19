@@ -1,12 +1,9 @@
-use core::ffi::c_void;
-use core::ptr::{null, null_mut};
+use core::ptr::null_mut;
 use alloc::vec;
 use alloc::vec::Vec;
 use alloc::boxed::Box;
 
-use bytes::{BufMut, Bytes, BytesMut};
-use sui_types::object::Data;
-use ur_registry::extend;
+use bytes::Bytes;
 
 use crate::common::types::PtrString;
 use crate::common::utils::recover_c_char;
@@ -47,6 +44,17 @@ impl Free for ScpContext {
 
 impl Free for u8 {
     fn free(&self) {}
+}
+
+#[no_mangle]
+pub extern "C" fn free_Response_VecFFI_u8(data: *mut VecFFI<u8>) {
+    if data.is_null() {
+        return;
+    }
+    let v = unsafe {Box::from_raw(data)};
+    let _x = unsafe {
+        Vec::from_raw_parts(v.data, v.size, v.cap)
+    };
 }
 
 #[no_mangle]
@@ -102,6 +110,15 @@ pub extern "C" fn nfc_create_scp_context(
 
     let ctx = Box::new(scp11);
     Response::success(Box::into_raw(ctx) as ScpContext)
+}
+
+#[no_mangle]
+pub extern "C" fn nfc_destory_scp_context(ctx: ScpContext) {
+    if ctx.is_null() {
+        return;
+    }
+
+    let _x = unsafe { Box::from_raw(ctx as *mut Scp11) };
 }
 
 #[no_mangle]
@@ -385,7 +402,7 @@ pub extern "C" fn nfc_read_data(ctx: ScpContext, slot: u8) -> Response<VecFFI<u8
 }
 
 #[no_mangle]
-pub extern "C" fn nfc_delete_data(ctx: ScpContext, slot: u8) -> SimpleResponse<VecFFI<u8>> {
+pub extern "C" fn nfc_delete_data(ctx: ScpContext, slot: u8) -> SimpleResponse<u8> {
     if ctx.is_null() {
         return SimpleResponse::from(ScpError::InvalidSession);
     }
@@ -475,19 +492,21 @@ fn mutual_authenticate(scp11: &mut Scp11, host_id: &str) -> Result<Vec<u8>> {
     let apdu = scp11.mutual_authenticate(host_id);
     let resp = transmit_apdu(apdu)?;
     resp.check_sw()?;
-    resp.data().map(|d| d.to_vec()).ok_or(ScpError::UnexpectedContent)
+    resp.data()
+        .map(|d| d.to_vec())
+        .ok_or(ScpError::UnexpectedContent)
 }
 
 fn get_store_bitmap(scp11: &Scp11) -> Result<u64> {
-        let apdu = apdu!(0x80, 0x6a, 0x00, 0x00);
-        let resp = transmit_safe_apdu(scp11, apdu)?;
-        let data = resp.data().ok_or(ScpError::UnexpectedContent)?;
-        let mut data = data.to_vec();
-        data.reverse();
-        let mut bitmap: u64 = 0;
-        for d in data {
-            bitmap <<= 8;
-            bitmap += d as u64;
-        }
-        Ok(bitmap)
+    let apdu = apdu!(0x80, 0x6a, 0x00, 0x00);
+    let resp = transmit_safe_apdu(scp11, apdu)?;
+    let data = resp.data().ok_or(ScpError::UnexpectedContent)?;
+    let mut data = data.to_vec();
+    data.reverse();
+    let mut bitmap: u64 = 0;
+    for d in data {
+        bitmap <<= 8;
+        bitmap += d as u64;
+    }
+    Ok(bitmap)
 }
