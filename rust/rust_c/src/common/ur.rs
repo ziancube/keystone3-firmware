@@ -83,7 +83,7 @@ use crate::{
 };
 
 #[no_mangle]
-pub static FRAGMENT_MAX_LENGTH_DEFAULT: usize = 160;
+pub static FRAGMENT_MAX_LENGTH_DEFAULT: usize = 100;
 pub static FRAGMENT_UNLIMITED_LENGTH: usize = 11000;
 
 #[repr(C)]
