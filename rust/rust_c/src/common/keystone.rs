@@ -99,13 +99,13 @@ pub fn build_check_result(
     match payload_content {
         Some(payload::Content::SignTx(sign_tx_content)) => {
             build_parse_context(master_fingerprint, x_pub).and_then(|context| {
-                #[cfg(feature = "bitcoin")]
-                if app_bitcoin::network::Network::from_str(sign_tx_content.coin_code.as_str())
-                    .is_ok()
-                {
-                    return app_bitcoin::check_raw_tx(payload, context)
-                        .map_err(|e| KeystoneError::CheckTxFailed(e.to_string()));
-                }
+                // #[cfg(feature = "bitcoin")]
+                // if app_bitcoin::network::Network::from_str(sign_tx_content.coin_code.as_str())
+                //     .is_ok()
+                // {
+                //     return app_bitcoin::check_raw_tx(payload, context)
+                //         .map_err(|e| KeystoneError::CheckTxFailed(e.to_string()));
+                // }
                 match sign_tx_content.coin_code.as_str() {
                     #[cfg(feature = "tron")]
                     "TRON" => app_tron::check_raw_tx(payload, context)
