@@ -42,6 +42,7 @@ pub fn generate_crypto_multi_accounts(
     device_type: &str,
     device_version: &str,
     wallet_name: &str,
+    ble_name: &str,
 ) -> URResult<CryptoMultiAccounts> {
     let device_id = get_device_id(serial_number);
     let mut keys = vec![];
@@ -90,6 +91,7 @@ pub fn generate_crypto_multi_accounts(
         Some(device_id),
         Some(device_version.to_string()),
         Some(wallet_name.to_string()),
+        Some(ble_name.to_string()),
     ))
 }
 

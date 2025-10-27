@@ -20,6 +20,7 @@ pub extern "C" fn get_keypal_wallet_ur(
     device_type: PtrString,
     device_version: PtrString,
     wallet_name: PtrString,
+    ble_name: PtrString,
 ) -> Ptr<UREncodeResult> {
     if master_fingerprint_length != 4 {
         return UREncodeResult::from(URError::UrEncodeError(format!(
@@ -39,6 +40,7 @@ pub extern "C" fn get_keypal_wallet_ur(
         let device_version = recover_c_char(device_version);
         let device_type = recover_c_char(device_type);
         let wallet_name = recover_c_char(wallet_name);
+        let ble_name = recover_c_char(ble_name);
         match normalize_xpub(keys) {
             Ok(_keys) => {
                 match app_wallets::keypal::generate_crypto_multi_accounts(
@@ -48,6 +50,7 @@ pub extern "C" fn get_keypal_wallet_ur(
                     &device_type,
                     &device_version,
                     &wallet_name,
+                    &ble_name,
                 ) {
                     Ok(data) => match data.try_into() {
                         Ok(_v) => UREncodeResult::encode(
