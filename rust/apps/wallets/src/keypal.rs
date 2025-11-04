@@ -121,7 +121,7 @@ fn generate_k1_normal_key(
         Some(key_path),
         None,
         Some(xpub.parent_fingerprint.to_bytes()),
-        Some("KeyPalPro".to_string()),
+        Some("KeyPal2".to_string()),
         note,
     ))
 }
@@ -150,7 +150,7 @@ fn generate_ed25519_key(
         Some(key_path),
         None,
         None,
-        Some("KeyPalPro".to_string()),
+        Some("KeyPal2".to_string()),
         note,
     ))
 }
