@@ -28,6 +28,7 @@ cbc = { workspace = true }
 cipher = { workspace = true }
 cmac = { workspace = true }
 minicbor = { workspace = true }
+serde = {workspace = true }
 #keystone owned
 sim_qr_reader = { workspace = true, optional = true }
 keystore = { workspace = true }

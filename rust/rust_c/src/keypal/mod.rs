@@ -1,11 +1,15 @@
+use crate::common::free::Free;
+use crate::common::structs::Response;
 use crate::common::structs::SimpleResponse;
 use crate::common::types::{PtrBytes, PtrString, PtrT, PtrUR};
 use crate::common::ur::{UREncodeResult, FRAGMENT_MAX_LENGTH_DEFAULT};
 use crate::common::utils::{convert_c_char, recover_c_char};
 use crate::extract_ptr_with_type;
+use crate::{free_str_ptr, free_vec, impl_c_ptr, make_free_method};
 use alloc::slice;
+use alloc::string::{String, ToString};
 use cty::c_char;
-use rsa::signature;
+use serde;
 use ur_registry::keypal::keypal_device_info::KeypalDeviceInfo;
 use ur_registry::keypal::keypal_device_signature::KeypalDeviceSignature;
 use ur_registry::keypal::keypal_device_verify_request::KeypalDeviceVerifyRequest;
@@ -75,4 +79,76 @@ pub extern "C" fn keypal_ur_encode_device_signature(
         )
         .c_ptr(),
     }
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct MnemonicData {
+    mn: String,
+    lang: String,
+    ph: String,
+}
+
+pub fn keypal_card_mnemonic_serialize(data: MnemonicData) -> String {
+    let json_str = serde_json::to_string(&data).unwrap();
+    return json_str;
+}
+
+pub fn keypal_card_mnemonic_deserialize(data: String) -> MnemonicData {
+    let json_struct = serde_json::from_str(&data).unwrap();
+    json_struct
+}
+
+#[repr(C)]
+pub struct KeypalMnemonicData {
+    pub mn: PtrString,
+    pub lang: PtrString,
+    pub ph: PtrString,
+}
+
+impl From<MnemonicData> for KeypalMnemonicData {
+    fn from(data: MnemonicData) -> Self {
+        KeypalMnemonicData {
+            mn: convert_c_char(data.mn),
+            lang: convert_c_char(data.lang),
+            ph: convert_c_char(data.ph),
+        }
+    }
+}
+
+impl Free for KeypalMnemonicData {
+    fn free(&self) {
+        free_str_ptr!(self.mn);
+        free_str_ptr!(self.lang);
+        free_str_ptr!(self.ph);
+    }
+}
+impl_c_ptr!(KeypalMnemonicData);
+make_free_method!(Response<KeypalMnemonicData>);
+
+#[no_mangle]
+pub extern "C" fn keypal_card_deserialize_mnemonic(
+    data: PtrString,
+) -> *mut Response<KeypalMnemonicData> {
+    let data_str = recover_c_char(data);
+    let mnemonic_data = keypal_card_mnemonic_deserialize(data_str);
+    let c_mnemonic_data: KeypalMnemonicData = mnemonic_data.into();
+    Response::success(c_mnemonic_data).c_ptr()
+}
+
+#[no_mangle]
+pub extern "C" fn keypal_card_serialize_mnemonic(
+    mn: PtrString,
+    lang: PtrString,
+    ph: PtrString,
+) -> *mut SimpleResponse<c_char> {
+    let mn_str = recover_c_char(mn);
+    let lang_str = recover_c_char(lang);
+    let ph_str = recover_c_char(ph);
+    let mnemonic_data = MnemonicData {
+        mn: mn_str,
+        lang: lang_str,
+        ph: ph_str,
+    };
+    let serialized_str = keypal_card_mnemonic_serialize(mnemonic_data);
+    SimpleResponse::success(convert_c_char(serialized_str) as *mut c_char).simple_c_ptr()
 }
