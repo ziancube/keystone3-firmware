@@ -1,3 +1,4 @@
+use crate::common::errors::ErrorCodes;
 use crate::common::free::Free;
 use crate::common::structs::Response;
 use crate::common::structs::SimpleResponse;
@@ -6,6 +7,7 @@ use crate::common::ur::{UREncodeResult, FRAGMENT_MAX_LENGTH_DEFAULT};
 use crate::common::utils::{convert_c_char, recover_c_char};
 use crate::extract_ptr_with_type;
 use crate::{free_str_ptr, free_vec, impl_c_ptr, make_free_method};
+use alloc::format;
 use alloc::slice;
 use alloc::string::{String, ToString};
 use cty::c_char;
@@ -89,13 +91,10 @@ pub struct MnemonicData {
 }
 
 pub fn keypal_card_mnemonic_serialize(data: MnemonicData) -> String {
-    let json_str = serde_json::to_string(&data).unwrap();
-    return json_str;
+    serde_json::to_string(&data).unwrap_or_default()
 }
-
-pub fn keypal_card_mnemonic_deserialize(data: String) -> MnemonicData {
-    let json_struct = serde_json::from_str(&data).unwrap();
-    json_struct
+pub fn keypal_card_mnemonic_deserialize(data: String) -> Result<MnemonicData, serde_json::Error> {
+    serde_json::from_str::<MnemonicData>(&data)
 }
 
 #[repr(C)]
@@ -130,9 +129,13 @@ pub extern "C" fn keypal_card_deserialize_mnemonic(
     data: PtrString,
 ) -> *mut Response<KeypalMnemonicData> {
     let data_str = recover_c_char(data);
-    let mnemonic_data = keypal_card_mnemonic_deserialize(data_str);
-    let c_mnemonic_data: KeypalMnemonicData = mnemonic_data.into();
-    Response::success(c_mnemonic_data).c_ptr()
+    match keypal_card_mnemonic_deserialize(data_str) {
+        Ok(mnemonic_data) => {
+            let c_mnemonic_data: KeypalMnemonicData = mnemonic_data.into();
+            Response::success(c_mnemonic_data).c_ptr()
+        }
+        Err(_) => Response::error(ErrorCodes::InvalidData, String::new()).c_ptr(),
+    }
 }
 
 #[no_mangle]
