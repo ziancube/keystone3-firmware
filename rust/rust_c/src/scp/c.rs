@@ -282,6 +282,13 @@ pub extern "C" fn nfc_verify_pin(
     let sw = resp.sw();
     match sw {
         0x9000 => SimpleResponse::success(null_mut()),
+        // locked
+        0x6983 => {
+            unsafe {
+                *count = 0;
+            }
+            SimpleResponse::from(ScpError::InvalidPin)
+        }
         0x6c30..0x6c3f => {
             unsafe {
                 *count = (sw & 0x0f) as u32;
@@ -335,6 +342,13 @@ pub extern "C" fn nfc_change_pin(
     let sw = resp.sw();
     match sw {
         0x9000 => SimpleResponse::success(null_mut()),
+        // locked
+        0x6983 => {
+            unsafe {
+                *count = 0;
+            }
+            SimpleResponse::from(ScpError::InvalidPin)
+        }
         0x6c30..0x6c3f => {
             unsafe {
                 *count = (sw & 0x0f) as u32;
