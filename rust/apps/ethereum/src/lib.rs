@@ -56,16 +56,7 @@ pub fn parse_personal_message(
     from_key: Option<PublicKey>,
 ) -> Result<PersonalMessage> {
     let raw_messge = hex::encode(tx_hex.clone());
-    let utf8_message = match String::from_utf8(tx_hex) {
-        Ok(utf8_message) => {
-            if app_utils::is_cjk(&utf8_message) {
-                "".to_string()
-            } else {
-                utf8_message
-            }
-        }
-        Err(_e) => "".to_string(),
-    };
+    let utf8_message = "".to_string();
     PersonalMessage::from(raw_messge, utf8_message, from_key)
 }
 

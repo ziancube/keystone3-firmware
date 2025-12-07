@@ -344,15 +344,11 @@ pub extern "C" fn eth_parse_personal_message(
 ) -> PtrT<TransactionParseResult<DisplayETHPersonalMessage>> {
     let crypto_eth = extract_ptr_with_type!(ptr, EthSignRequest);
     let xpub = recover_c_char(xpub);
-    let pubkey = match try_get_eth_public_key(xpub, &crypto_eth) {
-        Ok(key) => Some(key),
-        Err(e) => None,
-    };
     let transaction_type = TransactionType::from(crypto_eth.get_data_type());
 
     match transaction_type {
         TransactionType::PersonalMessage => {
-            match parse_personal_message(crypto_eth.get_sign_data(), pubkey) {
+            match parse_personal_message(crypto_eth.get_sign_data(), None) {
                 Ok(tx) => {
                     TransactionParseResult::success(DisplayETHPersonalMessage::from(tx).c_ptr())
                         .c_ptr()
