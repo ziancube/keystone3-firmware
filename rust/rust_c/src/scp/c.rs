@@ -289,7 +289,7 @@ pub extern "C" fn nfc_verify_pin(
             }
             SimpleResponse::from(ScpError::InvalidPin)
         }
-        0x6c30..0x6c3f => {
+        0x63c0..0x63cf => {
             unsafe {
                 *count = (sw & 0x0f) as u32;
             }
@@ -349,7 +349,7 @@ pub extern "C" fn nfc_change_pin(
             }
             SimpleResponse::from(ScpError::InvalidPin)
         }
-        0x6c30..0x6c3f => {
+        0x63c0..0x63cf => {
             unsafe {
                 *count = (sw & 0x0f) as u32;
             }
