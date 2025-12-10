@@ -312,8 +312,8 @@ pub enum QRCodeType {
     KeystoneSignRequest,
     #[cfg(feature = "ethereum")]
     EthSignRequest,
-    #[cfg(feature = "ethereum")]
-    EthBatchSignRequest,
+    // #[cfg(feature = "ethereum")]
+    // EthBatchSignRequest,
     #[cfg(feature = "solana")]
     SolSignRequest,
     #[cfg(feature = "near")]
@@ -333,8 +333,8 @@ pub enum QRCodeType {
 
     #[cfg(feature = "cosmos")]
     CosmosSignRequest,
-    #[cfg(feature = "ethereum")]
-    EvmSignRequest,
+    // #[cfg(feature = "ethereum")]
+    // EvmSignRequest,
     #[cfg(feature = "sui")]
     SuiSignRequest,
     #[cfg(feature = "sui")]
@@ -345,8 +345,8 @@ pub enum QRCodeType {
     IotaSignHashRequest,
     #[cfg(feature = "aptos")]
     AptosSignRequest,
-    #[cfg(not(feature = "btc-only"))]
-    QRHardwareCall,
+    // #[cfg(not(feature = "btc-only"))]
+    // QRHardwareCall,
     #[cfg(feature = "arweave")]
     ArweaveSignRequest,
     #[cfg(feature = "stellar")]
@@ -380,16 +380,16 @@ impl QRCodeType {
             InnerURType::KeystoneSignRequest(_) => Ok(QRCodeType::KeystoneSignRequest),
             #[cfg(feature = "ethereum")]
             InnerURType::EthSignRequest(_) => Ok(QRCodeType::EthSignRequest),
-            #[cfg(feature = "ethereum")]
-            InnerURType::EthBatchSignRequest(_) => Ok(QRCodeType::EthBatchSignRequest),
+            // #[cfg(feature = "ethereum")]
+            // InnerURType::EthBatchSignRequest(_) => Ok(QRCodeType::EthBatchSignRequest),
             #[cfg(feature = "solana")]
             InnerURType::SolSignRequest(_) => Ok(QRCodeType::SolSignRequest),
             #[cfg(feature = "near")]
             InnerURType::NearSignRequest(_) => Ok(QRCodeType::NearSignRequest),
             #[cfg(feature = "cosmos")]
             InnerURType::CosmosSignRequest(_) => Ok(QRCodeType::CosmosSignRequest),
-            #[cfg(feature = "ethereum")]
-            InnerURType::EvmSignRequest(_) => Ok(QRCodeType::EvmSignRequest),
+            // #[cfg(feature = "ethereum")]
+            // InnerURType::EvmSignRequest(_) => Ok(QRCodeType::EvmSignRequest),
             #[cfg(feature = "sui")]
             InnerURType::SuiSignRequest(_) => Ok(QRCodeType::SuiSignRequest),
             #[cfg(feature = "sui")]
@@ -430,7 +430,7 @@ impl QRCodeType {
             InnerURType::AvaxSignRequest(_) => Ok(QRCodeType::AvaxSignRequest),
             #[cfg(not(feature = "btc-only"))]
             InnerURType::KeypalDeviceVerifyRequest(_) => Ok(QRCodeType::KeypalDeviceVerifyRequest),
-            InnerURType::QRHardwareCall(_) => Ok(QRCodeType::QRHardwareCall),
+            // InnerURType::QRHardwareCall(_) => Ok(QRCodeType::QRHardwareCall),
             _ => Err(URError::NotSupportURTypeError(value.get_type_str())),
         }
     }
@@ -518,10 +518,10 @@ fn free_ur(ur_type: &QRCodeType, data: PtrUR) {
         QRCodeType::EthSignRequest => {
             free_ptr_with_type!(data, EthSignRequest);
         }
-        #[cfg(feature = "ethereum")]
-        QRCodeType::EthBatchSignRequest => {
-            free_ptr_with_type!(data, EthBatchSignRequest);
-        }
+        // #[cfg(feature = "ethereum")]
+        // QRCodeType::EthBatchSignRequest => {
+        //     free_ptr_with_type!(data, EthBatchSignRequest);
+        // }
         #[cfg(feature = "solana")]
         QRCodeType::SolSignRequest => {
             free_ptr_with_type!(data, SolSignRequest);
@@ -545,10 +545,10 @@ fn free_ur(ur_type: &QRCodeType, data: PtrUR) {
         QRCodeType::CosmosSignRequest => {
             free_ptr_with_type!(data, CosmosSignRequest);
         }
-        #[cfg(feature = "ethereum")]
-        QRCodeType::EvmSignRequest => {
-            free_ptr_with_type!(data, EvmSignRequest);
-        }
+        // #[cfg(feature = "ethereum")]
+        // QRCodeType::EvmSignRequest => {
+        //     free_ptr_with_type!(data, EvmSignRequest);
+        // }
         #[cfg(feature = "sui")]
         QRCodeType::SuiSignRequest => {
             free_ptr_with_type!(data, SuiSignRequest);
@@ -605,10 +605,10 @@ fn free_ur(ur_type: &QRCodeType, data: PtrUR) {
         QRCodeType::AvaxSignRequest => {
             free_ptr_with_type!(data, AvaxSignRequest);
         }
-        #[cfg(not(feature = "btc-only"))]
-        QRCodeType::QRHardwareCall => {
-            free_ptr_with_type!(data, QRHardwareCall);
-        }
+        // #[cfg(not(feature = "btc-only"))]
+        // QRCodeType::QRHardwareCall => {
+        //     free_ptr_with_type!(data, QRHardwareCall);
+        // }
         _ => {}
     }
 }
@@ -734,8 +734,8 @@ pub fn decode_ur(ur: String) -> URParseResult {
         QRCodeType::KeystoneSignRequest => _decode_ur::<KeystoneSignRequest>(ur, ur_type),
         #[cfg(feature = "ethereum")]
         QRCodeType::EthSignRequest => _decode_ur::<EthSignRequest>(ur, ur_type),
-        #[cfg(feature = "ethereum")]
-        QRCodeType::EthBatchSignRequest => _decode_ur::<EthBatchSignRequest>(ur, ur_type),
+        //#[cfg(feature = "ethereum")]
+        //QRCodeType::EthBatchSignRequest => _decode_ur::<EthBatchSignRequest>(ur, ur_type),
         #[cfg(feature = "solana")]
         QRCodeType::SolSignRequest => _decode_ur::<SolSignRequest>(ur, ur_type),
         #[cfg(feature = "near")]
@@ -756,8 +756,8 @@ pub fn decode_ur(ur: String) -> URParseResult {
         }
         #[cfg(feature = "cosmos")]
         QRCodeType::CosmosSignRequest => _decode_ur::<CosmosSignRequest>(ur, ur_type),
-        #[cfg(feature = "ethereum")]
-        QRCodeType::EvmSignRequest => _decode_ur::<EvmSignRequest>(ur, ur_type),
+        // #[cfg(feature = "ethereum")]
+        // QRCodeType::EvmSignRequest => _decode_ur::<EvmSignRequest>(ur, ur_type),
         #[cfg(feature = "sui")]
         QRCodeType::SuiSignRequest => _decode_ur::<SuiSignRequest>(ur, ur_type),
         #[cfg(feature = "sui")]
@@ -783,7 +783,7 @@ pub fn decode_ur(ur: String) -> URParseResult {
         #[cfg(feature = "avalanche")]
         QRCodeType::AvaxSignRequest => _decode_ur::<AvaxSignRequest>(ur, ur_type),
         #[cfg(not(feature = "btc-only"))]
-        QRCodeType::QRHardwareCall => _decode_ur::<QRHardwareCall>(ur, ur_type),
+        //QRCodeType::QRHardwareCall => _decode_ur::<QRHardwareCall>(ur, ur_type),
         QRCodeType::KeypalDeviceVerifyRequest => {
             _decode_ur::<KeypalDeviceVerifyRequest>(ur, ur_type)
         }
@@ -839,8 +839,8 @@ fn receive_ur(ur: String, decoder: &mut KeystoneURDecoder) -> URParseMultiResult
         QRCodeType::KeystoneSignRequest => _receive_ur::<KeystoneSignRequest>(ur, ur_type, decoder),
         #[cfg(feature = "ethereum")]
         QRCodeType::EthSignRequest => _receive_ur::<EthSignRequest>(ur, ur_type, decoder),
-        #[cfg(feature = "ethereum")]
-        QRCodeType::EthBatchSignRequest => _receive_ur::<EthBatchSignRequest>(ur, ur_type, decoder),
+        // #[cfg(feature = "ethereum")]
+        // QRCodeType::EthBatchSignRequest => _receive_ur::<EthBatchSignRequest>(ur, ur_type, decoder),
         #[cfg(feature = "solana")]
         QRCodeType::SolSignRequest => _receive_ur::<SolSignRequest>(ur, ur_type, decoder),
         #[cfg(feature = "near")]
@@ -865,8 +865,8 @@ fn receive_ur(ur: String, decoder: &mut KeystoneURDecoder) -> URParseMultiResult
         }
         #[cfg(feature = "cosmos")]
         QRCodeType::CosmosSignRequest => _receive_ur::<CosmosSignRequest>(ur, ur_type, decoder),
-        #[cfg(feature = "ethereum")]
-        QRCodeType::EvmSignRequest => _receive_ur::<EvmSignRequest>(ur, ur_type, decoder),
+        // #[cfg(feature = "ethereum")]
+        // QRCodeType::EvmSignRequest => _receive_ur::<EvmSignRequest>(ur, ur_type, decoder),
         #[cfg(feature = "sui")]
         QRCodeType::SuiSignRequest => _receive_ur::<SuiSignRequest>(ur, ur_type, decoder),
         #[cfg(feature = "sui")]
@@ -881,8 +881,8 @@ fn receive_ur(ur: String, decoder: &mut KeystoneURDecoder) -> URParseMultiResult
         QRCodeType::StellarSignRequest => _receive_ur::<StellarSignRequest>(ur, ur_type, decoder),
         #[cfg(feature = "aptos")]
         QRCodeType::AptosSignRequest => _receive_ur::<AptosSignRequest>(ur, ur_type, decoder),
-        #[cfg(not(feature = "btc-only"))]
-        QRCodeType::QRHardwareCall => _receive_ur::<QRHardwareCall>(ur, ur_type, decoder),
+        // #[cfg(not(feature = "btc-only"))]
+        // QRCodeType::QRHardwareCall => _receive_ur::<QRHardwareCall>(ur, ur_type, decoder),
         #[cfg(feature = "ton")]
         QRCodeType::TonSignRequest => _receive_ur::<TonSignRequest>(ur, ur_type, decoder),
         #[cfg(feature = "zcash")]

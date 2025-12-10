@@ -98,7 +98,7 @@ multi-coins = [
     #"bch",
     "bitcoin",
     #"cardano",
-    "cosmos",
+    #"cosmos",
     #"dash",
     "ethereum",
     #"ltc",
