@@ -1,7 +1,8 @@
 use crate::common::errors::ErrorCodes;
+use crate::common::errors::RustCError;
 use crate::common::free::Free;
 use crate::common::structs::Response;
-use crate::common::structs::SimpleResponse;
+use crate::common::structs::{SimpleResponse, TransactionCheckResult, TransactionParseResult};
 use crate::common::types::{PtrBytes, PtrString, PtrT, PtrUR};
 use crate::common::ur::{UREncodeResult, FRAGMENT_MAX_LENGTH_DEFAULT};
 use crate::common::utils::{convert_c_char, recover_c_char};
@@ -15,6 +16,8 @@ use serde;
 use ur_registry::keypal::keypal_device_info::KeypalDeviceInfo;
 use ur_registry::keypal::keypal_device_signature::KeypalDeviceSignature;
 use ur_registry::keypal::keypal_device_verify_request::KeypalDeviceVerifyRequest;
+use ur_registry::keypal::keypal_tron_sign_request::KeypalTronSignRequest;
+use ur_registry::keypal::keypal_tron_signature::KeypalTronSignature;
 use ur_registry::traits::RegistryItem;
 #[no_mangle]
 pub extern "C" fn keypal_ur_encode_device_info(
@@ -154,4 +157,71 @@ pub extern "C" fn keypal_card_serialize_mnemonic(
     };
     let serialized_str = keypal_card_mnemonic_serialize(mnemonic_data);
     SimpleResponse::success(convert_c_char(serialized_str) as *mut c_char).simple_c_ptr()
+}
+
+#[no_mangle]
+pub extern "C" fn keypal_tron_get_path(ptr: PtrUR) -> PtrString {
+    let tron_sign_request = extract_ptr_with_type!(ptr, KeypalTronSignRequest);
+    let derivation_path = tron_sign_request.get_derivation_path();
+    if let Some(path) = derivation_path.get_path() {
+        let formatted_path = if path.starts_with("m/") {
+            path
+        } else {
+            format!("m/{}", path)
+        };
+        return convert_c_char(formatted_path);
+    }
+    convert_c_char("".to_string())
+}
+
+#[no_mangle]
+pub extern "C" fn keypal_tron_parse_tx_raw(ptr: PtrUR) -> PtrString {
+    let tron_sign_request = extract_ptr_with_type!(ptr, KeypalTronSignRequest);
+    let tx_hex = tron_sign_request.get_sign_data();
+    convert_c_char(hex::encode(tx_hex))
+}
+
+#[no_mangle]
+pub extern "C" fn keypal_tron_ur_encode_signature(
+    ptr: PtrUR,
+    signature: PtrBytes,
+    signature_len: u32,
+) -> PtrT<UREncodeResult> {
+    let crypto_tron = extract_ptr_with_type!(ptr, KeypalTronSignRequest);
+    let signature = unsafe { slice::from_raw_parts(signature, signature_len as usize) };
+    let tron_signature = KeypalTronSignature::new(crypto_tron.get_request_id(), signature.to_vec());
+    match tron_signature.try_into() {
+        Err(e) => UREncodeResult::from(e).c_ptr(),
+        Ok(v) => UREncodeResult::encode(
+            v,
+            KeypalTronSignature::get_registry_type().get_type(),
+            FRAGMENT_MAX_LENGTH_DEFAULT,
+        )
+        .c_ptr(),
+    }
+}
+#[no_mangle]
+pub extern "C" fn keypal_tron_check(
+    ptr: PtrUR,
+    master_fingerprint: PtrBytes,
+    length: u32,
+) -> PtrT<TransactionCheckResult> {
+    if length != 4 {
+        return TransactionCheckResult::from(RustCError::InvalidMasterFingerprint).c_ptr();
+    }
+    let sol_sign_request = extract_ptr_with_type!(ptr, KeypalTronSignRequest);
+    let mfp = unsafe { core::slice::from_raw_parts(master_fingerprint, 4) };
+    if let Ok(mfp) = (mfp.try_into() as Result<[u8; 4], _>) {
+        let derivation_path: ur_registry::crypto_key_path::CryptoKeyPath =
+            sol_sign_request.get_derivation_path();
+        if let Some(ur_mfp) = derivation_path.get_source_fingerprint() {
+            return if mfp == ur_mfp {
+                TransactionCheckResult::new().c_ptr()
+            } else {
+                TransactionCheckResult::from(RustCError::MasterFingerprintMismatch).c_ptr()
+            };
+        }
+        return TransactionCheckResult::from(RustCError::MasterFingerprintMismatch).c_ptr();
+    };
+    TransactionCheckResult::from(RustCError::InvalidMasterFingerprint).c_ptr()
 }

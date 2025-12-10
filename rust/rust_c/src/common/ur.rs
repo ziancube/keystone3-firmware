@@ -71,6 +71,7 @@ use ur_registry::ton::ton_sign_request::TonSignRequest;
 use ur_registry::zcash::zcash_pczt::ZcashPczt;
 
 use ur_registry::keypal::keypal_device_verify_request::KeypalDeviceVerifyRequest;
+use ur_registry::keypal::keypal_tron_sign_request::KeypalTronSignRequest;
 
 use super::errors::{ErrorCodes, RustCError};
 use super::free::Free;
@@ -294,6 +295,7 @@ pub enum ViewType {
     #[cfg(feature = "btc-only")]
     MultisigBytesImportXpub,
     KeyPalDeviceVerifyView,
+    KeyPalTronSignRequestView,
     ViewTypeUnKnown,
 }
 
@@ -362,6 +364,7 @@ pub enum QRCodeType {
     #[cfg(feature = "monero")]
     XmrTxUnsignedRequest,
     KeypalDeviceVerifyRequest,
+    KeypalTronSignRequest,
     URTypeUnKnown,
 }
 
@@ -430,6 +433,7 @@ impl QRCodeType {
             InnerURType::AvaxSignRequest(_) => Ok(QRCodeType::AvaxSignRequest),
             #[cfg(not(feature = "btc-only"))]
             InnerURType::KeypalDeviceVerifyRequest(_) => Ok(QRCodeType::KeypalDeviceVerifyRequest),
+            InnerURType::KeypalTronSignRequest(_) => Ok(QRCodeType::KeypalTronSignRequest),
             // InnerURType::QRHardwareCall(_) => Ok(QRCodeType::QRHardwareCall),
             _ => Err(URError::NotSupportURTypeError(value.get_type_str())),
         }
@@ -787,6 +791,7 @@ pub fn decode_ur(ur: String) -> URParseResult {
         QRCodeType::KeypalDeviceVerifyRequest => {
             _decode_ur::<KeypalDeviceVerifyRequest>(ur, ur_type)
         }
+        QRCodeType::KeypalTronSignRequest => _decode_ur::<KeypalTronSignRequest>(ur, ur_type),
         QRCodeType::URTypeUnKnown | QRCodeType::SeedSignerMessage => URParseResult::from(
             URError::NotSupportURTypeError("UnKnown ur type".to_string()),
         ),
@@ -896,6 +901,9 @@ fn receive_ur(ur: String, decoder: &mut KeystoneURDecoder) -> URParseMultiResult
 
         QRCodeType::KeypalDeviceVerifyRequest => {
             _receive_ur::<KeypalDeviceVerifyRequest>(ur, ur_type, decoder)
+        }
+        QRCodeType::KeypalTronSignRequest => {
+            _receive_ur::<KeypalTronSignRequest>(ur, ur_type, decoder)
         }
         QRCodeType::URTypeUnKnown | QRCodeType::SeedSignerMessage => URParseMultiResult::from(
             URError::NotSupportURTypeError("UnKnown ur type".to_string()),
