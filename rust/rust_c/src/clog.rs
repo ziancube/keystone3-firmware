@@ -1,4 +1,5 @@
 use cstr_core::CString;
+#[cfg(feature = "sample_log")]
 pub fn log_message(msg: &str) {
     unsafe {
         crate::bindings::log_simple_message(
@@ -6,4 +7,8 @@ pub fn log_message(msg: &str) {
             CString::new(msg).unwrap().into_raw(),
         );
     }
+}
+
+#[cfg(not(feature = "sample_log"))]
+pub fn log_message(msg: &str) {
 }

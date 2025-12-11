@@ -134,6 +134,9 @@ simulator-cypherpunk = ["simulator", "cypherpunk"]
 # make IDE happy
 default = ["simulator-multi-coins"]
 
+# sample log
+sample_log = []
+
 [dev-dependencies]
 keystore = { path = "../keystore" }
 p256 = {version = "0.13", features=["ecdh"]}
