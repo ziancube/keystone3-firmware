@@ -646,29 +646,35 @@ pub extern "C" fn eth_sign_tx_dynamic(
     }
 
     let signature = match TransactionType::from(crypto_eth.get_data_type()) {
-        TransactionType::Legacy => {
-            app_ethereum::sign_legacy_tx(crypto_eth.get_sign_data().to_vec(), seed, &path)
-        }
-        TransactionType::TypedTransaction => match crypto_eth.get_sign_data().first() {
-            Some(0x02) => {
-                app_ethereum::sign_fee_markey_tx(crypto_eth.get_sign_data().to_vec(), seed, &path)
-            }
-            Some(x) => {
-                return UREncodeResult::from(RustCError::UnsupportedTransaction(format!(
-                    "ethereum tx type: {}",
-                    x
-                )))
-                .c_ptr();
-            }
-            None => {
-                return UREncodeResult::from(EthereumError::InvalidTransaction).c_ptr();
-            }
-        },
-        TransactionType::PersonalMessage => {
-            app_ethereum::sign_personal_message(crypto_eth.get_sign_data().to_vec(), seed, &path)
-        }
+        // TransactionType::Legacy => {
+        //     app_ethereum::sign_legacy_tx(crypto_eth.get_sign_data().to_vec(), seed, &path)
+        // }
+        // TransactionType::TypedTransaction => match crypto_eth.get_sign_data().first() {
+        //     Some(0x02) => {
+        //         app_ethereum::sign_fee_markey_tx(crypto_eth.get_sign_data().to_vec(), seed, &path)
+        //     }
+        //     Some(x) => {
+        //         return UREncodeResult::from(RustCError::UnsupportedTransaction(format!(
+        //             "ethereum tx type: {}",
+        //             x
+        //         )))
+        //         .c_ptr();
+        //     }
+        //     None => {
+        //         return UREncodeResult::from(EthereumError::InvalidTransaction).c_ptr();
+        //     }
+        // },
+        // TransactionType::PersonalMessage => {
+        //     app_ethereum::sign_personal_message(crypto_eth.get_sign_data().to_vec(), seed, &path)
+        // }
         TransactionType::TypedData => {
             app_ethereum::sign_typed_data_message(crypto_eth.get_sign_data().to_vec(), seed, &path)
+        }
+        _ => {
+            return UREncodeResult::from(RustCError::UnsupportedTransaction(
+                "Legacy or TypedTransaction or PersonalMessage".to_string(),
+            ))
+            .c_ptr();
         }
     };
     match signature {
