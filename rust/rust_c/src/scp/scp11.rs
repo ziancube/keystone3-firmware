@@ -463,7 +463,7 @@ pub struct Certificate {
     pub key_usage: Tagged<0x95, KeyUsage>,
     pub effective: Tagged<0x5F25, Date>,
     pub expiration: Tagged<0x5F24, Date>,
-    pub data: Tagged<0x53, ()>,
+    pub data: Option<Tagged<0x53, ()>>,
     pub restrictions: Option<Tagged<0xBF20, ()>>,
     pub pk: Tagged<0x7F49, PublicKeyData>,
     pub sig: Tagged<0x5F37, Vec<u8>>,
@@ -478,7 +478,9 @@ impl Certificate {
         self.key_usage.encode(&mut buf);
         self.effective.encode(&mut buf);
         self.expiration.encode(&mut buf);
-        self.data.encode(&mut buf);
+        if let Some(d) = &self.data {
+            d.encode(&mut buf);
+        }
         if let Some(r) = &self.restrictions {
             r.encode(&mut buf);
         }
@@ -500,7 +502,9 @@ impl Encode for Certificate {
             self.key_usage.encode(&mut buf);
             self.effective.encode(&mut buf);
             self.expiration.encode(&mut buf);
-            self.data.encode(&mut buf);
+            if let Some(d) = &self.data {
+                d.encode(&mut buf);
+            }
             if let Some(o) = &self.restrictions {
                 o.encode(&mut buf);
             }
@@ -524,7 +528,7 @@ impl Decode for Certificate {
         let key_usage = decode(buf)?;
         let effective = decode(buf)?;
         let expiration = decode(buf)?;
-        let data = decode(buf)?;
+        let data = try_decode(buf)?;
         let restrictions = try_decode(buf)?;
         let pk = decode(buf)?;
         let sig = decode(buf)?;
