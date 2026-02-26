@@ -19,6 +19,10 @@ use ur_registry::keypal::keypal_device_verify_request::KeypalDeviceVerifyRequest
 use ur_registry::keypal::keypal_tron_sign_request::KeypalTronSignRequest;
 use ur_registry::keypal::keypal_tron_signature::KeypalTronSignature;
 use ur_registry::traits::RegistryItem;
+
+use alloc::boxed::Box;
+use alloc::vec::Vec;
+use core::ffi::{c_uchar, c_ulong};
 #[no_mangle]
 pub extern "C" fn keypal_ur_encode_device_info(
     features: PtrBytes,
@@ -224,4 +228,117 @@ pub extern "C" fn keypal_tron_check(
         return TransactionCheckResult::from(RustCError::MasterFingerprintMismatch).c_ptr();
     };
     TransactionCheckResult::from(RustCError::InvalidMasterFingerprint).c_ptr()
+}
+
+/// 暴露给 C 的不透明类型：**只作为指针使用**
+#[repr(C)]
+pub struct RustVecU8 {
+    _private: [u8; 0],
+}
+
+// 一些内部小工具函数：在指针层面把 RustVecU8 <-> Vec<u8> 互相转换
+#[inline]
+unsafe fn as_vec_mut<'a>(ptr: *mut RustVecU8) -> &'a mut Vec<u8> {
+    &mut *(ptr as *mut Vec<u8>)
+}
+
+#[inline]
+unsafe fn as_vec_ref<'a>(ptr: *const RustVecU8) -> &'a Vec<u8> {
+    &*(ptr as *const Vec<u8>)
+}
+
+/// 创建一个空 Vec<u8>
+#[no_mangle]
+pub extern "C" fn vec_u8_new() -> *mut RustVecU8 {
+    let v: Vec<u8> = Vec::new();
+    Box::into_raw(Box::new(v)) as *mut RustVecU8
+}
+
+/// 创建一个带初始容量的 Vec<u8>
+#[no_mangle]
+pub extern "C" fn vec_u8_with_capacity(cap: c_ulong) -> *mut RustVecU8 {
+    let v: Vec<u8> = Vec::with_capacity(cap as usize);
+    Box::into_raw(Box::new(v)) as *mut RustVecU8
+}
+
+/// 释放 Vec<u8>
+#[no_mangle]
+pub extern "C" fn vec_u8_free(ptr: *mut RustVecU8) {
+    if ptr.is_null() {
+        return;
+    }
+    unsafe {
+        // 把 pointer 当成 Box<Vec<u8>> 拿回来，drop 掉
+        let _ = Box::from_raw(ptr as *mut Vec<u8>);
+    }
+}
+
+/// 获取长度
+#[no_mangle]
+pub extern "C" fn vec_u8_len(ptr: *const RustVecU8) -> c_ulong {
+    if ptr.is_null() {
+        return 0;
+    }
+    unsafe { as_vec_ref(ptr).len() as c_ulong }
+}
+
+/// 获取容量
+#[no_mangle]
+pub extern "C" fn vec_u8_capacity(ptr: *const RustVecU8) -> c_ulong {
+    if ptr.is_null() {
+        return 0;
+    }
+    unsafe { as_vec_ref(ptr).capacity() as c_ulong }
+}
+
+/// 末尾 push 一个字节
+#[no_mangle]
+pub extern "C" fn vec_u8_push(ptr: *mut RustVecU8, value: c_uchar) {
+    if ptr.is_null() {
+        return;
+    }
+    unsafe {
+        as_vec_mut(ptr).push(value);
+    }
+}
+
+/// 一次性 push 一段 bytes
+#[no_mangle]
+pub extern "C" fn vec_u8_push_bytes(ptr: *mut RustVecU8, data: *const c_uchar, len: c_ulong) {
+    if ptr.is_null() || data.is_null() {
+        return;
+    }
+
+    unsafe {
+        let v = as_vec_mut(ptr);
+        let slice = core::slice::from_raw_parts(data, len as usize);
+        v.extend_from_slice(slice);
+    }
+}
+
+/// 安全按下标读一个字节，成功返回 1，失败(越界/空指针)返回 0
+#[no_mangle]
+pub extern "C" fn vec_u8_get(ptr: *const RustVecU8, index: c_ulong, out: *mut c_uchar) -> i32 {
+    if ptr.is_null() || out.is_null() {
+        return 0;
+    }
+    unsafe {
+        let v = as_vec_ref(ptr);
+        let i = index as usize;
+        if i >= v.len() {
+            return 0;
+        }
+        *out = v[i];
+    }
+    1
+}
+
+/// 获取底层数据指针（可读写）
+/// 注意：拿到这个指针之后，如果再 push/扩容，指针会失效。
+#[no_mangle]
+pub extern "C" fn vec_u8_data_mut(ptr: *mut RustVecU8) -> *mut c_uchar {
+    if ptr.is_null() {
+        return core::ptr::null_mut();
+    }
+    unsafe { as_vec_mut(ptr).as_mut_ptr() }
 }
