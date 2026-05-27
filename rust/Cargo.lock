@@ -2601,18 +2601,17 @@ dependencies = [
 [[package]]
 name = "libflate"
 version = "1.3.0"
-source = "git+https://github.com/KeystoneHQ/libflate.git?tag=1.3.1#e6236f7417b9bd34dbbd4b3c821be10299c44a73"
+source = "git+https://github.com/ziancube/libflate.git?tag=1.3.2#95df06ae48e969bbea14aecd617e18dc3ff463ea"
 dependencies = [
  "adler32",
  "core2",
- "crc32fast",
  "libflate_lz77",
 ]
 
 [[package]]
 name = "libflate_lz77"
 version = "1.2.0"
-source = "git+https://github.com/KeystoneHQ/libflate.git?tag=1.3.1#e6236f7417b9bd34dbbd4b3c821be10299c44a73"
+source = "git+https://github.com/ziancube/libflate.git?tag=1.3.2#95df06ae48e969bbea14aecd617e18dc3ff463ea"
 dependencies = [
  "core2",
  "hashbrown 0.13.2",
