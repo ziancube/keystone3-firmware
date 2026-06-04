@@ -4,6 +4,7 @@ use alloc::slice;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use app_bitcoin::multi_sig::wallet::parse_wallet_config;
+use bitcoin::psbt;
 use core::ptr::null_mut;
 use core::str::FromStr;
 
@@ -335,10 +336,11 @@ pub extern "C" fn btc_check_psbt_bytes(
     }
     unsafe {
         let psbt = core::slice::from_raw_parts(psbt_bytes, psbt_bytes_length as usize);
-        let psbt = match get_psbt_bytes(psbt) {
-            Ok(psbt) => psbt,
-            Err(e) => return TransactionCheckResult::from(e).c_ptr(),
-        };
+        // let psbt = match get_psbt_bytes(psbt) {
+        //     Ok(psbt) => psbt,
+        //     Err(e) => return TransactionCheckResult::from(e).c_ptr(),
+        // };
+        let psbt = psbt.to_vec();
 
         let verify_code = if verify_code.is_null() {
             None
@@ -371,10 +373,11 @@ pub extern "C" fn btc_parse_psbt_bytes(
     }
     unsafe {
         let psbt = core::slice::from_raw_parts(psbt_bytes, psbt_bytes_length as usize);
-        let psbt = match get_psbt_bytes(psbt) {
-            Ok(psbt) => psbt,
-            Err(e) => return TransactionParseResult::from(e).c_ptr(),
-        };
+        // let psbt = match get_psbt_bytes(psbt) {
+        //     Ok(psbt) => psbt,
+        //     Err(e) => return TransactionParseResult::from(e).c_ptr(),
+        // };
+        let psbt = psbt.to_vec();
         let multisig_wallet_config = if multisig_wallet_config.is_null() {
             None
         } else {
