@@ -1,9 +1,11 @@
+use crate::keypal::{as_vec_ref, RustVecU8};
 use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
 use alloc::slice;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use app_bitcoin::multi_sig::wallet::parse_wallet_config;
+use bitcoin::consensus::encode::serialize;
 use bitcoin::psbt;
 use core::ptr::null_mut;
 use core::str::FromStr;
@@ -112,6 +114,51 @@ pub extern "C" fn btc_sign_psbt(
         master_fingerprint_len,
         FRAGMENT_MAX_LENGTH_DEFAULT,
     )
+}
+
+#[no_mangle]
+pub extern "C" fn btc_sign_psbt_bytes(
+    psbt: *mut RustVecU8,
+    seed: PtrBytes,
+    seed_len: u32,
+    master_fingerprint: PtrBytes,
+    master_fingerprint_len: u32,
+    finalize: bool,
+) -> *mut RustVecU8 {
+    if master_fingerprint_len != 4 {
+        return null_mut();
+    }
+    let master_fingerprint = unsafe { core::slice::from_raw_parts(master_fingerprint, 4) };
+    let master_fingerprint =
+        match bitcoin::bip32::Fingerprint::from_str(hex::encode(master_fingerprint).as_str())
+            .map_err(|_e| RustCError::InvalidMasterFingerprint)
+        {
+            Ok(mfp) => mfp,
+            Err(e) => {
+                return null_mut();
+            }
+        };
+    let seed = unsafe { slice::from_raw_parts(seed, seed_len as usize) };
+    let psbt = unsafe { as_vec_ref(psbt) };
+
+    let result = app_bitcoin::sign_psbt_no_serialize(psbt.clone(), seed, master_fingerprint);
+    match result {
+        Ok(signed_psbt) => {
+            if (finalize) {
+                match signed_psbt.extract_tx() {
+                    Ok(finalized) => {
+                        let buf = serialize(&finalized);
+                        Box::into_raw(Box::new(buf)) as *mut RustVecU8
+                    }
+                    Err(_) => null_mut(),
+                }
+            } else {
+                let buf = signed_psbt.serialize();
+                Box::into_raw(Box::new(buf)) as *mut RustVecU8
+            }
+        }
+        Err(_) => null_mut(),
+    }
 }
 
 #[no_mangle]

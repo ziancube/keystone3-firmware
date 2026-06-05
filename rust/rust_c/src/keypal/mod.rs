@@ -237,13 +237,11 @@ pub struct RustVecU8 {
 }
 
 // 一些内部小工具函数：在指针层面把 RustVecU8 <-> Vec<u8> 互相转换
-#[inline]
-unsafe fn as_vec_mut<'a>(ptr: *mut RustVecU8) -> &'a mut Vec<u8> {
+pub unsafe fn as_vec_mut<'a>(ptr: *mut RustVecU8) -> &'a mut Vec<u8> {
     &mut *(ptr as *mut Vec<u8>)
 }
 
-#[inline]
-unsafe fn as_vec_ref<'a>(ptr: *const RustVecU8) -> &'a Vec<u8> {
+pub unsafe fn as_vec_ref<'a>(ptr: *const RustVecU8) -> &'a Vec<u8> {
     &*(ptr as *const Vec<u8>)
 }
 
