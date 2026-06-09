@@ -326,12 +326,34 @@ pub struct TypedData {
     pub primary_type: String,
     /// The message to be signed.
     pub message: BTreeMap<String, serde_json::Value>,
+    /// The items to be show.
+    pub show_items: BTreeMap<String, String>,
+}
+const ITEM_SEP: u8 = 0x1E;
+const KV_SEP: u8 = 0x1F;
+fn show_items_to_string(items: &BTreeMap<String, String>) -> String {
+    let mut out = String::new();
+    let mut first = true;
+
+    for (k, v) in items {
+        if !first {
+            out.push(ITEM_SEP as char);
+        }
+        first = false;
+
+        out.push_str(k);
+        out.push(KV_SEP as char);
+        out.push_str(v);
+    }
+
+    out
 }
 
 impl Into<StructTypedDta> for TypedData {
     fn into(self) -> StructTypedDta {
         let domain_separator = self.domain.separator(Some(&self.types));
         let message_hash = self.struct_hash().unwrap();
+        let show_items = show_items_to_string(&self.show_items);
         StructTypedDta {
             name: self.domain.name.unwrap_or_default(),
             version: self.domain.version.unwrap_or_default(),
@@ -359,8 +381,87 @@ impl Into<StructTypedDta> for TypedData {
             from: None,
             message_hash: hex::encode(&message_hash),
             domain_separator: hex::encode(&domain_separator),
+            show_items,
         }
     }
+}
+
+/// Flattens EIP712Domain into key-value pairs for display
+fn flatten_domain(domain: &EIP712Domain) -> BTreeMap<String, String> {
+    let mut result = BTreeMap::new();
+
+    if let Some(name) = &domain.name {
+        result.insert("domain.name".to_string(), name.clone());
+    }
+    if let Some(version) = &domain.version {
+        result.insert("domain.version".to_string(), version.clone());
+    }
+    if let Some(chain_id) = domain.chain_id {
+        result.insert("domain.chainId".to_string(), chain_id.to_string());
+    }
+    if let Some(verifying_contract) = &domain.verifying_contract {
+        result.insert(
+            "domain.verifyingContract".to_string(),
+            verifying_contract.clone(),
+        );
+    }
+    if let Some(salt) = domain.salt {
+        let mut s = String::from("0x");
+        s.push_str(&hex::encode(salt));
+        result.insert("domain.salt".to_string(), s);
+    }
+
+    result
+}
+
+/// Flattens nested JSON structures to leaf elements with dot/bracket notation
+fn flatten_message(
+    primary_type: &str,
+    message: &serde_json::Value,
+    types: &Types,
+    prefix: &str,
+) -> BTreeMap<String, String> {
+    let mut result = BTreeMap::new();
+
+    if let Some(fields) = types.get(primary_type) {
+        for field in fields {
+            if let Some(value) = message.get(&field.name) {
+                let field_path = if prefix.is_empty() {
+                    field.name.clone()
+                } else {
+                    format!("{}.{}", prefix, field.name)
+                };
+
+                // Check if this field type is a custom struct
+                if types.contains_key(&field.r#type) {
+                    // It's a struct, recurse
+                    let nested = flatten_message(&field.r#type, value, types, &field_path);
+                    result.extend(nested);
+                } else if field.r#type.contains('[') {
+                    // It's an array
+                    let (base_type, _) = field.r#type.rsplit_once('[').unwrap();
+                    if let Some(arr) = value.as_array() {
+                        for (idx, item) in arr.iter().enumerate() {
+                            let array_path = format!("{}[{}]", field_path, idx);
+                            if types.contains_key(base_type) {
+                                // Array of structs
+                                let nested = flatten_message(base_type, item, types, &array_path);
+                                result.extend(nested);
+                            } else {
+                                // Array of primitives
+                                result.insert(array_path, item.to_string());
+                            }
+                        }
+                    }
+                } else {
+                    // It's a primitive type, add to result
+                    result.insert(field_path, value.to_string());
+                }
+            }
+        }
+    }
+
+    result
 }
 
 /// According to the MetaMask implementation,
@@ -396,11 +497,18 @@ impl<'de> Deserialize<'de> for TypedData {
                     primary_type,
                     message,
                 } = v;
+                let message_json =
+                    serde_json::Value::Object(serde_json::Map::from_iter(message.clone()));
+                let mut show_items = flatten_domain(&domain);
+                let message_items =
+                    flatten_message(&primary_type, &message_json, &types, "message");
+                show_items.extend(message_items);
                 Ok(TypedData {
                     domain,
                     types,
                     primary_type,
                     message,
+                    show_items,
                 })
             }
             Type::String(s) => {
@@ -410,11 +518,18 @@ impl<'de> Deserialize<'de> for TypedData {
                     primary_type,
                     message,
                 } = serde_json::from_str(&s).map_err(serde::de::Error::custom)?;
+                let message_json =
+                    serde_json::Value::Object(serde_json::Map::from_iter(message.clone()));
+                let mut show_items = flatten_domain(&domain);
+                let message_items =
+                    flatten_message(&primary_type, &message_json, &types, "message");
+                show_items.extend(message_items);
                 Ok(TypedData {
                     domain,
                     types,
                     primary_type,
                     message,
+                    show_items,
                 })
             }
         }
@@ -785,6 +900,7 @@ pub fn encode_eip712_type(token: Token) -> Token {
 #[cfg(test)]
 mod tests {
     extern crate std;
+    use std::println;
 
     use super::*;
 
@@ -902,6 +1018,10 @@ mod tests {
         });
 
         let typed_data: TypedData = serde_json::from_value(json).unwrap();
+
+        for (k, v) in typed_data.show_items.iter() {
+            println!("{}: {}", k, v);
+        }
 
         let hash = typed_data.encode_eip712().unwrap();
         assert_eq!(
@@ -1045,6 +1165,9 @@ mod tests {
         });
 
         let typed_data: TypedData = serde_json::from_value(json).unwrap();
+        for (k, v) in typed_data.show_items.iter() {
+            println!("{}: {}", k, v);
+        }
         let hash = typed_data.encode_eip712().unwrap();
         assert_eq!(
             "0808c17abba0aef844b0470b77df9c994bc0fa3e244dc718afd66a3901c4bd7b",
@@ -1167,6 +1290,9 @@ mod tests {
         }
                 );
         let typed_data: TypedData = serde_json::from_value(json).unwrap();
+        for (k, v) in typed_data.show_items.iter() {
+            println!("{}: {}", k, v);
+        }
         let hash = typed_data.encode_eip712().unwrap();
         assert_eq!(
             "0b8aa9f3712df0034bc29fe5b24dd88cfdba02c7f499856ab24632e2969709a8",

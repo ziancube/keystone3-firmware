@@ -605,6 +605,17 @@ pub extern "C" fn eth_parse_typed_data(
         .c_ptr(),
     }
 }
+#[no_mangle]
+pub extern "C" fn eth_parse_typed_data_bytes(
+    json: *mut RustVecU8,
+) -> PtrT<TransactionParseResult<DisplayETHTypedData>> {
+    let raw_bytes = unsafe { as_vec_ref(json) };
+    let tx = parse_typed_data_message(raw_bytes.to_vec(), None);
+    match tx {
+        Ok(t) => TransactionParseResult::success(DisplayETHTypedData::from(t).c_ptr()).c_ptr(),
+        Err(e) => TransactionParseResult::from(e).c_ptr(),
+    }
+}
 
 #[no_mangle]
 pub extern "C" fn eth_ur_encode_signature(

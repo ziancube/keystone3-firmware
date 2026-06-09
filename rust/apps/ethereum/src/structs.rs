@@ -177,6 +177,7 @@ pub struct TypedData {
     pub from: Option<String>,
     pub domain_separator: String,
     pub message_hash: String,
+    pub show_items: String,
 }
 
 impl TypedData {
