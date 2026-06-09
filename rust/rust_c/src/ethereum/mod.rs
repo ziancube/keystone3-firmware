@@ -1,6 +1,9 @@
+use crate::common::structs::SimpleResponse;
+use crate::keypal::{as_vec_ref, RustVecU8};
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use alloc::{format, slice};
+use cty::c_char;
 
 use app_ethereum::address::derive_address;
 use app_ethereum::batch_tx_rules::rule_swap;
@@ -695,6 +698,26 @@ pub extern "C" fn eth_sign_tx_dynamic(
                 .c_ptr(),
             }
         }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn eth_sign_typed_data_bytes(
+    json: *mut RustVecU8,
+    seed: PtrBytes,
+    seed_len: u32,
+    path: PtrString,
+    v4: bool,
+) -> *mut SimpleResponse<c_char> {
+    let mut path = recover_c_char(path);
+    let seed = unsafe { slice::from_raw_parts(seed, seed_len as usize) };
+    let json = unsafe { as_vec_ref(json) };
+    match app_ethereum::sign_typed_data_message(json.to_vec(), seed, &path) {
+        Ok(signature) => {
+            SimpleResponse::success(convert_c_char(hex::encode(signature.serialize())))
+                .simple_c_ptr()
+        }
+        Err(e) => SimpleResponse::from(e).simple_c_ptr(),
     }
 }
 

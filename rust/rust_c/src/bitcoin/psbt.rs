@@ -141,22 +141,9 @@ pub extern "C" fn btc_sign_psbt_bytes(
     let seed = unsafe { slice::from_raw_parts(seed, seed_len as usize) };
     let psbt = unsafe { as_vec_ref(psbt) };
 
-    let result = app_bitcoin::sign_psbt_no_serialize(psbt.clone(), seed, master_fingerprint);
+    let result = app_bitcoin::sign_psbt(psbt.clone(), seed, master_fingerprint);
     match result {
-        Ok(signed_psbt) => {
-            if (finalize) {
-                match signed_psbt.extract_tx() {
-                    Ok(finalized) => {
-                        let buf = serialize(&finalized);
-                        Box::into_raw(Box::new(buf)) as *mut RustVecU8
-                    }
-                    Err(_) => null_mut(),
-                }
-            } else {
-                let buf = signed_psbt.serialize();
-                Box::into_raw(Box::new(buf)) as *mut RustVecU8
-            }
-        }
+        Ok(signed_psbt) => Box::into_raw(Box::new(signed_psbt)) as *mut RustVecU8,
         Err(_) => null_mut(),
     }
 }
