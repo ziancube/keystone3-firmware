@@ -3,22 +3,62 @@ use alloc::boxed::Box;
 
 use super::util::{calculate_max_txn_fee, convert_wei_to_eth};
 use crate::common::ffi::VecFFI;
-use crate::common::free::Free;
+use crate::common::free::{Free, SimpleFree};
 use crate::common::structs::{Response, TransactionParseResult};
-use crate::common::types::{Ptr, PtrString, PtrT};
+use crate::common::types::{Ptr, PtrBytes, PtrString, PtrT};
 use crate::common::utils::convert_c_char;
 use crate::{check_and_free_ptr, free_str_ptr, free_vec, impl_c_ptr, make_free_method};
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use app_ethereum::abi::{ContractData, ContractMethodParam};
 use app_ethereum::erc20::encode_erc20_transfer_calldata;
-use app_ethereum::structs::{ParsedEthereumTransaction, PersonalMessage, TypedData};
+use app_ethereum::structs::{ParsedEthereumTransaction, PersonalMessage, TypedData, Authorization};
 use core::ptr::null_mut;
 use core::str::FromStr;
 use itertools::Itertools;
 use ur_registry::ethereum::eth_sign_request::DataType;
 use ur_registry::pb::protoc::EthTx;
 use crate::ethereum::abiex::ETHAbiexParsedType;
+
+#[repr(C)]
+pub struct CEthereumAuthorization{
+    pub chain_id: u32,
+    pub address: VecFFI<u8>,
+    pub nonce: u64,
+    pub v: u32,
+    pub r: VecFFI<u8>,
+    pub s: VecFFI<u8>,
+}
+impl_c_ptr!(CEthereumAuthorization);
+
+impl Free for CEthereumAuthorization {
+    fn free(&self) {
+        <VecFFI<u8> as SimpleFree>::free(&self.address);
+        <VecFFI<u8> as SimpleFree>::free(&self.r);
+        <VecFFI<u8> as SimpleFree>::free(&self.s);
+    }
+}
+
+impl From<Authorization> for CEthereumAuthorization {
+    fn from(auth: Authorization) -> Self {
+        Self {
+            chain_id: auth.chain_id,
+            address: auth.address.as_bytes().to_vec().into(),
+            nonce: auth.nonce,
+            v: auth.v.unwrap_or(0),
+            r: if let Some(r) = auth.r {
+                r.as_bytes().to_vec().into()
+            } else {
+                VecFFI{data: null_mut(), size: 0, cap: 0}
+            },
+            s: if let Some(s) = auth.s {
+                s.as_bytes().to_vec().into()
+            } else {
+                VecFFI{data: null_mut(), size: 0, cap: 0}
+            },
+        }
+    }
+}
 
 #[repr(C)]
 pub struct CParsedEthereumTransaction {
@@ -35,6 +75,7 @@ pub struct CParsedEthereumTransaction {
     pub max_fee_per_gas: PtrString,
     pub max_priority_fee_per_gas: PtrString,
     pub chain_id: u64,
+    pub authorization: PtrT<VecFFI<CEthereumAuthorization>>,
     pub tx_type: u8,
 }
 
@@ -58,6 +99,13 @@ impl From<app_ethereum::structs::ParsedEthereumTransaction> for CParsedEthereumT
                 .unwrap_or(null_mut()),
             chain_id: tx.chain_id,
             tx_type: tx.tx_type,
+            authorization: match tx.authorization_list {
+                Some(auth_list) => {
+                    let auths: Vec<CEthereumAuthorization> = auth_list.into_iter().map(|a| a.into()).collect();
+                    VecFFI::from(auths).c_ptr()
+                }
+                None => null_mut(),
+            },
         }
     }
 }
@@ -75,6 +123,7 @@ impl Free for CParsedEthereumTransaction {
         free_str_ptr!(self.max_priority);
         free_str_ptr!(self.max_fee_per_gas);
         free_str_ptr!(self.max_priority_fee_per_gas);
+        free_vec!(self.authorization);
     }
 }
 

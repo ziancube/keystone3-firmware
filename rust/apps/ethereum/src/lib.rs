@@ -12,6 +12,7 @@ pub use legacy_transaction::*;
 
 use crate::crypto::keccak256;
 use crate::eip1559_transaction::{EIP1559Transaction, ParsedEIP1559Transaction};
+use crate::eip7702_transaction::{EIP7702Transaction, ParsedEIP7702Transaction};
 use crate::eip712::eip712::{Eip712, TypedData as Eip712TypedData};
 use crate::errors::{EthereumError, Result};
 use crate::structs::{EthereumSignature, ParsedEthereumTransaction, PersonalMessage, TypedData};
@@ -23,6 +24,7 @@ pub mod batch_tx_rules;
 mod bindings;
 mod crypto;
 mod eip1559_transaction;
+mod eip7702_transaction;
 pub mod eip712;
 pub mod erc20;
 pub mod errors;
@@ -49,6 +51,16 @@ pub fn parse_fee_market_tx(
 ) -> Result<ParsedEthereumTransaction> {
     ParsedEthereumTransaction::from_eip1559(
         ParsedEIP1559Transaction::from(EIP1559Transaction::decode_raw(tx_hex)?),
+        from_key,
+    )
+}
+
+pub fn parse_eoa_code_tx(
+    tx_hex: &[u8],
+    from_key: Option<PublicKey>,
+) -> Result<ParsedEthereumTransaction> {
+    ParsedEthereumTransaction::from_eip7702(
+        ParsedEIP7702Transaction::from(EIP7702Transaction::decode_raw(tx_hex)?),
         from_key,
     )
 }

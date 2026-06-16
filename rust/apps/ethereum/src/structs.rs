@@ -1,6 +1,7 @@
 use core::ops::Add;
 
 use crate::eip1559_transaction::ParsedEIP1559Transaction;
+use crate::eip7702_transaction::ParsedEIP7702Transaction;
 use crate::eip712::eip712::TypedData as Eip712TypedData;
 use crate::errors::Result;
 use crate::{address::generate_address, eip712::eip712::Eip712};
@@ -12,7 +13,7 @@ use alloc::vec::Vec;
 use bitcoin::secp256k1::PublicKey;
 use cryptoxide::hashing::keccak256;
 use ethabi::{encode, Address, Token};
-use ethereum_types::{H160, U256};
+use ethereum_types::{H160, H256, U256};
 use hex;
 use rlp::{Decodable, DecoderError, Encodable, Rlp};
 use serde_json::{from_str, Value};
@@ -51,6 +52,51 @@ impl Encodable for TransactionAction {
 }
 
 #[derive(Clone, Debug)]
+pub struct Authorization {
+    pub chain_id: u32,
+    pub address: H160,
+    pub nonce: u64,
+    pub v: Option<u32>,
+    pub r: Option<H256>,
+    pub s: Option<H256>,
+}
+
+impl Decodable for Authorization {
+    fn decode(rlp: &Rlp) -> core::result::Result<Self, DecoderError> {
+        if !rlp.is_list() {
+            return Err(DecoderError::RlpExpectedToBeList);
+        }
+
+        let chain_id = rlp.val_at(0)?;
+        let address = rlp.val_at(1)?;
+        let nonce = rlp.val_at(2)?;
+        let v = rlp.val_at(3)?;
+        let r = rlp.val_at(4)?;
+        let s = rlp.val_at(5)?;
+        Ok(Self {
+            chain_id,
+            address,
+            nonce,
+            v,
+            r,
+            s,
+        })
+    }
+}
+
+impl Encodable for Authorization {
+    fn rlp_append(&self, s: &mut rlp::RlpStream) {
+        s.begin_list(6)
+        .append(&self.chain_id)
+        .append(&self.address)
+        .append(&self.nonce)
+        .append(&self.v)
+        .append(&self.r)
+        .append(&self.s);
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct ParsedEthereumTransaction {
     pub nonce: u32,
     pub chain_id: u64,
@@ -67,6 +113,8 @@ pub struct ParsedEthereumTransaction {
 
     pub gas_limit: String,
     pub max_txn_fee: String,
+
+    pub authorization_list: Option<Vec<Authorization>>,
 
     pub tx_type: u8,
 }
@@ -91,6 +139,7 @@ impl ParsedEthereumTransaction {
             max_priority_fee_per_gas: None,
             max_fee: None,
             max_priority: None,
+            authorization_list: None,
 
             tx_type: 0,
         })
@@ -114,8 +163,33 @@ impl ParsedEthereumTransaction {
             max_fee: Some(tx.max_fee),
             max_priority: Some(tx.max_priority),
             gas_price: None,
+            authorization_list: None,
 
             tx_type: 2,
+        })
+    }
+
+    pub(crate) fn from_eip7702(
+        tx: ParsedEIP7702Transaction,
+        from: Option<PublicKey>,
+    ) -> Result<Self> {
+        Ok(Self {
+            nonce: tx.nonce,
+            gas_limit: tx.gas_limit,
+            from: from.map_or(None, |key| Some(generate_address(key).unwrap_or_default())),
+            to: tx.to,
+            value: tx.value,
+            chain_id: tx.chain_id,
+            input: tx.input,
+            max_fee_per_gas: Some(tx.max_fee_per_gas),
+            max_priority_fee_per_gas: Some(tx.max_priority_fee_per_gas),
+            max_txn_fee: tx.max_txn_fee,
+            max_fee: Some(tx.max_fee),
+            max_priority: Some(tx.max_priority),
+            gas_price: None,
+            authorization_list: Some(tx.authorization_list),
+
+            tx_type: 4,
         })
     }
 }

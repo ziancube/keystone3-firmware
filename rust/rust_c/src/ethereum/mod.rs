@@ -10,8 +10,8 @@ use app_ethereum::batch_tx_rules::rule_swap;
 use app_ethereum::erc20::{parse_erc20, parse_erc20_approval};
 use app_ethereum::errors::EthereumError;
 use app_ethereum::{
-    parse_fee_market_tx, parse_legacy_tx, parse_personal_message, parse_typed_data_message,
-    LegacyTransaction, TransactionSignature,
+    parse_eoa_code_tx, parse_fee_market_tx, parse_legacy_tx, parse_personal_message,
+    parse_typed_data_message, LegacyTransaction, TransactionSignature,
 };
 use cryptoxide::hashing::keccak256;
 
@@ -268,10 +268,22 @@ pub extern "C" fn eth_parse_raw(
         }
         TransactionType::TypedTransaction => {
             match crypto_eth.get_sign_data().first() {
-                Some(02) => {
+                Some(0x02) => {
                     //remove envelop
                     let payload = &crypto_eth.get_sign_data()[1..];
                     let tx = parse_fee_market_tx(payload, pubkey);
+                    match tx {
+                        Ok(t) => TransactionParseResult::success(
+                            CParsedEthereumTransaction::from(t).c_ptr(),
+                        )
+                        .c_ptr(),
+                        Err(e) => TransactionParseResult::from(e).c_ptr(),
+                    }
+                }
+                Some(0x04) => {
+                    //remove envelop
+                    let payload = &crypto_eth.get_sign_data()[1..];
+                    let tx = parse_eoa_code_tx(payload, pubkey);
                     match tx {
                         Ok(t) => TransactionParseResult::success(
                             CParsedEthereumTransaction::from(t).c_ptr(),
