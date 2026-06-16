@@ -353,6 +353,7 @@ pub mod tests {
                 .to_string(),
             message_hash: "0x2760e0669e7dbd5a2a9f695bac8db1432400df52a9895d8eae50d94dcb82976b"
                 .to_string(),
+            show_items: "".to_string(),
         };
         assert_eq!(
             typed_data.get_safe_tx_hash(),
