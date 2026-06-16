@@ -70,9 +70,29 @@ impl Decodable for Authorization {
         let chain_id = rlp.val_at(0)?;
         let address = rlp.val_at(1)?;
         let nonce = rlp.val_at(2)?;
-        let v = rlp.val_at(3)?;
-        let r = rlp.val_at(4)?;
-        let s = rlp.val_at(5)?;
+        let v: u32 = rlp.val_at(3)?;
+        let r_bytes: Bytes = rlp.val_at(4)?;
+        let s_bytes: Bytes = rlp.val_at(5)?;
+        let v = if r_bytes.is_empty() || s_bytes.is_empty() {
+            None
+        } else {
+            Some(v)
+        };
+        let r = if r_bytes.is_empty() {
+            None
+        } else if r_bytes.len() == 32 {
+            Some(H256::from_slice(&r_bytes))
+        } else {
+            return Err(DecoderError::RlpInvalidIndirection);
+        };
+        let s = if s_bytes.is_empty() {
+            None
+        } else if s_bytes.len() == 32 {
+            Some(H256::from_slice(&s_bytes))
+        } else {
+            return Err(DecoderError::RlpInvalidIndirection);
+        };
+
         Ok(Self {
             chain_id,
             address,
