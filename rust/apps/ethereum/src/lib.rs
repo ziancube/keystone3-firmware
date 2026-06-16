@@ -17,8 +17,10 @@ use crate::errors::{EthereumError, Result};
 use crate::structs::{EthereumSignature, ParsedEthereumTransaction, PersonalMessage, TypedData};
 
 pub mod abi;
+pub mod abiex;
 pub mod address;
 pub mod batch_tx_rules;
+mod bindings;
 mod crypto;
 mod eip1559_transaction;
 pub mod eip712;
@@ -592,7 +594,7 @@ mod tests {
                     }
                   ]
             }
-        }        
+        }
         "#;
         let typed_data: Eip712TypedData = serde_json::from_str(utf8_msg).unwrap();
         let hash = typed_data.encode_eip712().unwrap();

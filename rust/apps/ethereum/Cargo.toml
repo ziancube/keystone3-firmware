@@ -23,6 +23,8 @@ bitcoin = { workspace = true }
 cryptoxide = { workspace = true }
 rsa = { workspace = true }
 ur-registry = { workspace = true }
+anyhow = {version = "*", default-features = false}
+cty = {workspace = true}
 
 [dev-dependencies]
 keystore = { path = "../../keystore" }
