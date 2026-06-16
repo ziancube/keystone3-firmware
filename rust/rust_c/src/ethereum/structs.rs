@@ -23,7 +23,7 @@ use crate::ethereum::abiex::ETHAbiexParsedType;
 #[repr(C)]
 pub struct CEthereumAuthorization{
     pub chain_id: u32,
-    pub address: VecFFI<u8>,
+    pub address: PtrString,
     pub nonce: u64,
     pub v: u32,
     pub r: VecFFI<u8>,
@@ -33,7 +33,7 @@ impl_c_ptr!(CEthereumAuthorization);
 
 impl Free for CEthereumAuthorization {
     fn free(&self) {
-        <VecFFI<u8> as SimpleFree>::free(&self.address);
+        free_str_ptr!(self.address);
         <VecFFI<u8> as SimpleFree>::free(&self.r);
         <VecFFI<u8> as SimpleFree>::free(&self.s);
     }
@@ -43,7 +43,7 @@ impl From<Authorization> for CEthereumAuthorization {
     fn from(auth: Authorization) -> Self {
         Self {
             chain_id: auth.chain_id,
-            address: auth.address.as_bytes().to_vec().into(),
+            address: convert_c_char(hex::encode(auth.address.as_bytes())),
             nonce: auth.nonce,
             v: auth.v.unwrap_or(0),
             r: if let Some(r) = auth.r {
