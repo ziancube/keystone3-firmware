@@ -1,6 +1,6 @@
 use super::ffi::VecFFI;
 use super::structs::SimpleResponse;
-use super::types::{PtrString, PtrT};
+use super::types::{PtrString, PtrT, PtrEthabiexParsed};
 use super::ur::{UREncodeMultiResult, UREncodeResult, URParseMultiResult, URParseResult};
 use crate::make_free_method;
 use alloc::boxed::Box;
@@ -135,6 +135,15 @@ pub extern "C" fn free_rust_value(any_ptr: *mut c_void) {
     }
     unsafe {
         drop(Box::from_raw(any_ptr));
+    }
+}
+#[no_mangle]
+pub extern "C" fn free_eth_abiex_parsed(ptr: PtrEthabiexParsed) {
+    if ptr.is_null() {
+        return;
+    }
+    unsafe {
+        drop(Box::from_raw(ptr));
     }
 }
 

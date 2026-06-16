@@ -18,6 +18,7 @@ use core::str::FromStr;
 use itertools::Itertools;
 use ur_registry::ethereum::eth_sign_request::DataType;
 use ur_registry::pb::protoc::EthTx;
+use crate::ethereum::abiex::ETHAbiexParsedType;
 
 #[repr(C)]
 pub struct CParsedEthereumTransaction {
@@ -610,6 +611,66 @@ impl Free for DisplaySwapkitContractData {
     }
 }
 
+
+#[repr(C)]
+pub struct DisplayETHAbiexParsed {
+    pub eth_abiex_parsed_type: ETHAbiexParsedType,
+    pub to: PtrString,
+    pub value: PtrString,
+    pub token_id: PtrString,
+}
+impl Free for DisplayETHAbiexParsed {
+    fn free(&self) {
+        free_str_ptr!(self.to);
+        free_str_ptr!(self.value);
+        free_str_ptr!(self.token_id);
+    }
+}
+
+impl DisplayETHAbiexParsed {
+    pub fn unknown() -> Self {
+        Self {
+            eth_abiex_parsed_type: ETHAbiexParsedType::ETHABIEX_PARSED_TYPE_UNKNOWN,
+            to: null_mut(),
+            value: null_mut(),
+            token_id: null_mut(),
+        }
+    }
+}
+
+impl From<app_ethereum::abiex::Erc20Transfer> for DisplayETHAbiexParsed {
+    fn from(value: app_ethereum::abiex::Erc20Transfer) -> Self {
+        Self {
+            eth_abiex_parsed_type: ETHAbiexParsedType::ETHABIEX_PARSED_TYPE_TRANSFER,
+            to: convert_c_char(value.to),
+            value: convert_c_char(value.amount),
+            token_id: null_mut(),
+        }
+    }
+}
+
+impl From<app_ethereum::abiex::Erc20Approval> for DisplayETHAbiexParsed {
+    fn from(value: app_ethereum::abiex::Erc20Approval) -> Self {
+        Self {
+            eth_abiex_parsed_type: ETHAbiexParsedType::ETHABIEX_PARSED_TYPE_APPROVAL,
+            to: convert_c_char(value.spender),
+            value: convert_c_char(value.amount),
+            token_id: null_mut(),
+        }
+    }
+}
+
+impl From<app_ethereum::abiex::Erc721TransferFrom> for DisplayETHAbiexParsed {
+    fn from(value: app_ethereum::abiex::Erc721TransferFrom) -> Self {
+        Self {
+            eth_abiex_parsed_type: ETHAbiexParsedType::ETHABIEX_PARSED_TYPE_TRANSFER_FROM,
+            to: convert_c_char(value.to),
+            value: null_mut(),
+            token_id: convert_c_char(value.token_id),
+        }
+    }
+}
+
 impl_c_ptr!(DisplayETHBatchTx);
 
 make_free_method!(TransactionParseResult<DisplayETH>);
@@ -621,3 +682,4 @@ make_free_method!(Response<DisplayContractData>);
 make_free_method!(TransactionParseResult<EthParsedErc20Transaction>);
 make_free_method!(Response<EthParsedErc20Approval>);
 make_free_method!(Response<DisplaySwapkitContractData>);
+make_free_method!(Response<DisplayETHAbiexParsed>);

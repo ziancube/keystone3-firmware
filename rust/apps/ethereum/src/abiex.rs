@@ -32,14 +32,14 @@ fn amount_format(token_info: &TokenInfo, amount: U256) -> String {
 
     let units = 10u128.pow(token_info.decimals);
     // 整数部分
-    let amount = amount / units;
+    let integer = amount / units;
     // 小数部分
     let decimal = amount % units;
 
     if decimal == U256::zero() {
-        format!("{}{}", amount, token_info.symbol)
+        format!("{} {}", integer, token_info.symbol)
     } else {
-        format!("{}.{}{}", amount, decimal, token_info.symbol)
+        format!("{}.{} {}", integer, decimal, token_info.symbol)
     }
 }
 
@@ -97,10 +97,7 @@ pub fn contract_call_parse(
             ops.into_contract_call()
         }
         _ => {
-            return Err(anyhow::anyhow!(
-                "method not found {}",
-                hex::encode(selector)
-            ));
+            ContractCall::Unknown
         }
     };
     Ok(call)
@@ -135,8 +132,8 @@ pub trait ContractCallable {
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct Erc20Transfer {
-    to: String,
-    amount: String,
+    pub to: String,
+    pub amount: String,
 }
 
 impl ContractCallable for Erc20Transfer {
@@ -191,8 +188,8 @@ impl ContractCallable for Erc20Transfer {
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct Erc20Approval {
-    spender: String,
-    amount: String,
+    pub spender: String,
+    pub amount: String,
 }
 
 impl ContractCallable for Erc20Approval {
@@ -340,9 +337,9 @@ impl ContractCallable for Permit2Approval {
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct Erc721TransferFrom {
-    from: String,
-    to: String,
-    token_id: String,
+    pub from: String,
+    pub to: String,
+    pub token_id: String,
 }
 
 impl ContractCallable for Erc721TransferFrom {
@@ -499,7 +496,7 @@ pub enum BatchCall {
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
-pub struct ExecuteBatch(Vec<BatchCall>);
+pub struct ExecuteBatch(pub Vec<BatchCall>);
 
 impl BatchCall {
     pub fn parse_call(
@@ -530,9 +527,10 @@ impl BatchCall {
             ) => Okk((target, value, data)),
             _ => return Err(anyhow::anyhow!("Unknown call")),
         }?;
-        match contract_call_parse(chain_id, &target.to_fixed_bytes(), &data) {
-            Ok(ContractCall::Transfer(erc20_transfer)) => Ok(Self::Transfer(erc20_transfer)),
-            Ok(ContractCall::Approval(erc20_approval)) => Ok(Self::Approval(erc20_approval)),
+        match contract_call_parse(chain_id, &target.to_fixed_bytes(), &data)? {
+            ContractCall::Transfer(erc20_transfer) => Ok(Self::Transfer(erc20_transfer)),
+            ContractCall::Approval(erc20_approval) => Ok(Self::Approval(erc20_approval)),
+            // ERC721: TransferFrom, SafeTransferFrom as Unknown
             _ => Ok(Self::Unknown),
         }
     }
@@ -777,4 +775,6 @@ pub enum ContractCall {
     TransferFrom(Erc721TransferFrom),
     /// ExecuteBatch
     Batch(ExecuteBatch),
+    /// Unknown
+    Unknown,
 }

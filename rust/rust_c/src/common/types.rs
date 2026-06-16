@@ -14,6 +14,7 @@ pub type PtrDecoder = PtrVoid;
 pub type PtrEncoder = PtrVoid;
 pub type PtrT<T> = *mut T;
 pub type Ptr<T> = *mut T;
+pub type PtrEthabiexParsed = PtrVoid;
 
 impl Free for PtrString {
     fn free(&self) {
