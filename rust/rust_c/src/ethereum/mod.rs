@@ -3,6 +3,7 @@ use crate::keypal::{as_vec_ref, RustVecU8};
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use alloc::{format, slice};
+use app_ethereum::structs::Authorization;
 use cty::c_char;
 
 use app_ethereum::address::derive_address;
@@ -568,6 +569,7 @@ pub extern "C" fn eth_sign_batch_tx(
                     request.get_request_id(),
                     sig.serialize(),
                     Some(KEYSTONE.to_string()),
+                    None,
                 );
                 result.push(eth_signature)
             }
@@ -636,13 +638,22 @@ pub extern "C" fn eth_ur_encode_signature(
     signature: PtrBytes,
     signature_len: u32,
     origin: PtrString,
+    authorization: PtrBytes,
+    authorization_len: u32,
 ) -> PtrT<UREncodeResult> {
     let crypto_eth = extract_ptr_with_type!(ptr, EthSignRequest);
     let signature = unsafe { slice::from_raw_parts(signature, signature_len as usize) };
+    let authorization = unsafe { slice::from_raw_parts(authorization, authorization_len as usize) };
+    let authorization_opt = if authorization.is_empty() {
+        None
+    } else {
+        Some(authorization.to_vec())
+    };
     let eth_signature = EthSignature::new(
         crypto_eth.get_request_id(),
         signature.to_vec(),
         Some(recover_c_char(origin)),
+        authorization_opt,
     );
     match eth_signature.try_into() {
         Err(e) => UREncodeResult::from(e).c_ptr(),
@@ -711,6 +722,7 @@ pub extern "C" fn eth_sign_tx_dynamic(
                 crypto_eth.get_request_id(),
                 sig.serialize(),
                 Some(KEYSTONE.to_string()),
+                None,
             );
             match eth_signature.try_into() {
                 Err(e) => UREncodeResult::from(e).c_ptr(),
