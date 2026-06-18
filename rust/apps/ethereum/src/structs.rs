@@ -1,4 +1,4 @@
-use core::ops::Add;
+use core::str::FromStr;
 
 use crate::eip1559_transaction::ParsedEIP1559Transaction;
 use crate::eip7702_transaction::ParsedEIP7702Transaction;
@@ -6,6 +6,7 @@ use crate::eip712::eip712::TypedData as Eip712TypedData;
 use crate::errors::Result;
 use crate::{address::generate_address, eip712::eip712::Eip712};
 use crate::{Bytes, ParsedLegacyTransaction};
+use alloc::collections::btree_map::BTreeMap;
 use alloc::string::{String, ToString};
 use alloc::{format, vec};
 
@@ -16,7 +17,7 @@ use ethabi::{encode, Address, Token};
 use ethereum_types::{H160, H256, U256};
 use hex;
 use rlp::{Decodable, DecoderError, Encodable, Rlp};
-use serde_json::{from_str, Value};
+use serde_json::{Value};
 
 #[derive(Clone)]
 pub enum TransactionAction {
@@ -271,19 +272,15 @@ pub struct TypedData {
     pub from: Option<String>,
     pub domain_separator: String,
     pub message_hash: String,
-    pub show_items: String,
+    pub show_items: BTreeMap<String, String>,
 }
 
 impl TypedData {
-    pub fn from(data: TypedData, from: Option<PublicKey>) -> Result<Self> {
+    pub fn from_raw(data: Eip712TypedData, from: Option<PublicKey>) -> Result<Self> {
         Ok(Self {
             from: from.map_or(None, |key| Some(generate_address(key).unwrap_or_default())),
-            ..data
+            ..data.into()
         })
-    }
-
-    pub fn from_raw(mut data: Eip712TypedData, from: Option<PublicKey>) -> Result<Self> {
-        Self::from(Into::into(data), from)
     }
 
     pub fn get_safe_tx_hash(&self) -> String {
@@ -394,6 +391,44 @@ impl TypedData {
     }
 }
 
+impl From<Eip712TypedData> for TypedData {
+    fn from(value: Eip712TypedData) -> Self {
+        let domain_separator = value.domain.separator(Some(&value.types));
+        let message_hash = value.struct_hash().unwrap();
+        TypedData {
+            name: value.domain.name.unwrap_or_default(),
+            version: value.domain.version.unwrap_or_default(),
+            chain_id: value
+                .domain
+                .chain_id
+                .map_or("".to_string(), |v| v.to_string()),
+            verifying_contract: match value.domain.verifying_contract {
+                Some(v) => {
+                    // verify then convert to hex string
+                    match Address::from_str(&v) {
+                        Ok(address) => {
+                            format!("0x{}", hex::encode(address.0))
+                        }
+                        Err(_) => v,
+                    }
+                }
+                None => "".to_string(),
+            },
+            salt: value.domain.salt.map_or("".to_string(), |v| {
+                let mut s = String::from("0x");
+                s.push_str(&hex::encode(v));
+                s
+            }),
+            primary_type: value.primary_type,
+            message: serde_json::to_string_pretty(&value.message).unwrap_or("".to_string()),
+            from: None,
+            message_hash: hex::encode(&message_hash),
+            domain_separator: hex::encode(&domain_separator),
+            show_items: value.show_items,
+        }
+    }
+}
+
 #[cfg(test)]
 pub mod tests {
     use crate::structs::EthereumSignature;
@@ -402,6 +437,7 @@ pub mod tests {
     extern crate std;
     use crate::structs::TypedData;
     use std::string::ToString;
+    use alloc::collections::btree_map::BTreeMap;
     #[test]
     fn test_signature() {
         {
@@ -447,7 +483,7 @@ pub mod tests {
                 .to_string(),
             message_hash: "0x2760e0669e7dbd5a2a9f695bac8db1432400df52a9895d8eae50d94dcb82976b"
                 .to_string(),
-            show_items: "".to_string(),
+            show_items: BTreeMap::new(),
         };
         assert_eq!(
             typed_data.get_safe_tx_hash(),

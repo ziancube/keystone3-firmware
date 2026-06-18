@@ -19,7 +19,6 @@ use serde_json;
 use thiserror;
 
 use crate::crypto::keccak256;
-use crate::structs::TypedData as StructTypedDta;
 
 use super::human_readable::lexer::HumanReadableParser;
 use super::serde_helpers::deserialize_salt_opt;
@@ -328,62 +327,6 @@ pub struct TypedData {
     pub message: BTreeMap<String, serde_json::Value>,
     /// The items to be show.
     pub show_items: BTreeMap<String, String>,
-}
-const ITEM_SEP: u8 = 0x1E;
-const KV_SEP: u8 = 0x1F;
-fn show_items_to_string(items: &BTreeMap<String, String>) -> String {
-    let mut out = String::new();
-    let mut first = true;
-
-    for (k, v) in items {
-        if !first {
-            out.push(ITEM_SEP as char);
-        }
-        first = false;
-
-        out.push_str(k);
-        out.push(KV_SEP as char);
-        out.push_str(v);
-    }
-
-    out
-}
-
-impl Into<StructTypedDta> for TypedData {
-    fn into(self) -> StructTypedDta {
-        let domain_separator = self.domain.separator(Some(&self.types));
-        let message_hash = self.struct_hash().unwrap();
-        let show_items = show_items_to_string(&self.show_items);
-        StructTypedDta {
-            name: self.domain.name.unwrap_or_default(),
-            version: self.domain.version.unwrap_or_default(),
-            chain_id: self
-                .domain
-                .chain_id
-                .map_or("".to_string(), |v| v.to_string()),
-            verifying_contract: self.domain.verifying_contract.map_or("".to_string(), |v| {
-                match Address::from_str(&v) {
-                    Ok(address) => {
-                        let mut s = String::from("0x");
-                        s.push_str(&hex::encode(address.0));
-                        s
-                    }
-                    Err(_) => v,
-                }
-            }),
-            salt: self.domain.salt.map_or("".to_string(), |v| {
-                let mut s = String::from("0x");
-                s.push_str(&hex::encode(v));
-                s
-            }),
-            primary_type: self.primary_type,
-            message: serde_json::to_string_pretty(&self.message).unwrap_or("".to_string()),
-            from: None,
-            message_hash: hex::encode(&message_hash),
-            domain_separator: hex::encode(&domain_separator),
-            show_items,
-        }
-    }
 }
 
 /// Flattens EIP712Domain into key-value pairs for display

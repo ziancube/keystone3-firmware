@@ -2,7 +2,7 @@
 use alloc::boxed::Box;
 
 use super::util::{calculate_max_txn_fee, convert_wei_to_eth};
-use crate::common::ffi::VecFFI;
+use crate::common::ffi::{CSliceFFI, VecFFI};
 use crate::common::free::{Free, SimpleFree};
 use crate::common::structs::{Response, TransactionParseResult};
 use crate::common::types::{Ptr, PtrBytes, PtrString, PtrT};
@@ -403,6 +403,29 @@ impl Free for DisplayETHPersonalMessage {
 }
 
 #[repr(C)]
+pub struct DisplayETHTypedDataItem {
+    name: PtrString,
+    value: PtrString,
+}
+
+impl_c_ptr!(DisplayETHTypedDataItem);
+impl Free for DisplayETHTypedDataItem {
+    fn free(&self) {
+        free_str_ptr!(self.name);
+        free_str_ptr!(self.value);
+    }
+}
+
+impl From<(&String, &String)> for DisplayETHTypedDataItem {
+    fn from((k, v): (&String, &String)) -> Self {
+        Self {
+            name: convert_c_char(k.clone()),
+            value: convert_c_char(v.clone()),
+        }
+    }
+}
+
+#[repr(C)]
 pub struct DisplayETHTypedData {
     name: PtrString,
     version: PtrString,
@@ -415,7 +438,7 @@ pub struct DisplayETHTypedData {
     domain_hash: PtrString,
     message_hash: PtrString,
     safe_tx_hash: PtrString,
-    show_items: PtrString,
+    show_items: VecFFI<DisplayETHTypedDataItem>,
 }
 
 impl From<TypedData> for DisplayETHTypedData {
@@ -429,7 +452,7 @@ impl From<TypedData> for DisplayETHTypedData {
         }
 
         let safe_tx_hash = message.get_safe_tx_hash();
-
+        let show_items = message.show_items.iter().map(|(k, v)| DisplayETHTypedDataItem::from((k, v))).collect::<Vec<_>>();
         Self {
             name: to_ptr_string(message.name),
             version: to_ptr_string(message.version),
@@ -442,7 +465,7 @@ impl From<TypedData> for DisplayETHTypedData {
             domain_hash: to_ptr_string(message.domain_separator),
             message_hash: to_ptr_string(message.message_hash),
             safe_tx_hash: to_ptr_string(safe_tx_hash),
-            show_items: to_ptr_string(message.show_items),
+            show_items: show_items.into(),
         }
     }
 }
@@ -462,7 +485,7 @@ impl Free for DisplayETHTypedData {
         free_str_ptr!(self.domain_hash);
         free_str_ptr!(self.message_hash);
         free_str_ptr!(self.safe_tx_hash);
-        free_str_ptr!(self.show_items);
+        self.show_items.free();
     }
 }
 
