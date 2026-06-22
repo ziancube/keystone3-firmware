@@ -96,9 +96,7 @@ pub fn contract_call_parse(
             let ops = HandleOps::parse(chain_id, address, params)?;
             ops.into_contract_call()
         }
-        _ => {
-            ContractCall::Unknown
-        }
+        _ => ContractCall::Unknown,
     };
     Ok(call)
 }
@@ -237,7 +235,13 @@ impl ContractCallable for Erc20Approval {
         }?;
         let spender = format!("0x{:x}", spender);
         let token_info = get_token_info(chain_id, address);
-        let amount = amount_format(&token_info, amount.into());
+        let mut unlimited_value: U256 = 100000000000u128.into();
+        unlimited_value *= U256::from(10u128.pow(token_info.decimals));
+        let amount = if amount >= &unlimited_value {
+            "unlimited".to_string()
+        } else {
+            amount_format(&token_info, amount.into())
+        };
 
         Ok(Self { spender, amount })
     }
@@ -621,12 +625,8 @@ impl HandleOps {
                     .ops
                     .iter()
                     .map(|op| match op {
-                        ContractCall::Transfer(transfer) => {
-                            BatchCall::Transfer(transfer.clone())
-                        }
-                        ContractCall::Approval(approval) => {
-                            BatchCall::Approval(approval.clone())
-                        }
+                        ContractCall::Transfer(transfer) => BatchCall::Transfer(transfer.clone()),
+                        ContractCall::Approval(approval) => BatchCall::Approval(approval.clone()),
                         _ => BatchCall::Unknown,
                     })
                     .collect::<Vec<_>>();
