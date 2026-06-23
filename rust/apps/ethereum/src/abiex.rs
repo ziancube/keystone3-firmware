@@ -1,3 +1,5 @@
+use core::str::FromStr;
+
 use crate::bindings;
 use alloc::boxed::Box;
 use alloc::ffi::CString;
@@ -96,7 +98,7 @@ pub fn contract_call_parse(
             let ops = HandleOps::parse(chain_id, address, params)?;
             ops.into_contract_call()
         }
-        _ => ContractCall::Unknown,
+        _ => ContractCall::Unknown(params.to_vec()),
     };
     Ok(call)
 }
@@ -346,6 +348,22 @@ pub struct Erc721TransferFrom {
     pub token_id: String,
 }
 
+impl Erc721TransferFrom {
+    pub fn build(&self) -> Vec<u8> {
+        let method = Self::method();
+        let from: [u8; 20] = hex::decode(&self.from).unwrap().try_into().unwrap();
+        let to: [u8; 20] = hex::decode(&self.to).unwrap().try_into().unwrap();
+        let inputs = vec![
+            ethabi::Token::Address(ethabi::Address::from(from)),
+            ethabi::Token::Address(ethabi::Address::from(to)),
+            ethabi::Token::Uint(U256::from_str(&self.token_id).unwrap()),
+        ];
+        let mut data = Self::SELECTOR.to_vec();
+        data.extend_from_slice(&method.encode_input(&inputs).unwrap().as_slice());
+        data
+    }
+}
+
 impl ContractCallable for Erc721TransferFrom {
     // transferFrom(address from, address to, uint256 tokenId)
     // 0x23B872DD
@@ -496,7 +514,7 @@ impl ContractCallable for Erc721SafeTransferFrom {
 pub enum BatchCall {
     Transfer(Erc20Transfer),
     Approval(Erc20Approval),
-    Unknown,
+    Unknown(Vec<u8>),
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -535,7 +553,7 @@ impl BatchCall {
             ContractCall::Transfer(erc20_transfer) => Ok(Self::Transfer(erc20_transfer)),
             ContractCall::Approval(erc20_approval) => Ok(Self::Approval(erc20_approval)),
             // ERC721: TransferFrom, SafeTransferFrom as Unknown
-            _ => Ok(Self::Unknown),
+            _ => Ok(Self::Unknown(data.to_vec())),
         }
     }
 }
@@ -604,7 +622,7 @@ impl ContractCallable for ExecuteBatch {
         let calls = calls
             .iter()
             .map(|call| {
-                BatchCall::parse_call(chain_id, address, call).unwrap_or(BatchCall::Unknown)
+                BatchCall::parse_call(chain_id, address, call).unwrap_or(BatchCall::Unknown(Vec::new()))
             })
             .collect::<Vec<_>>();
         Ok(Self(calls))
@@ -624,14 +642,21 @@ impl HandleOps {
                 let calls = self
                     .ops
                     .iter()
-                    .map(|op| match op {
-                        ContractCall::Transfer(transfer) => BatchCall::Transfer(transfer.clone()),
-                        ContractCall::Approval(approval) => BatchCall::Approval(approval.clone()),
-                        _ => BatchCall::Unknown,
-                    })
+                    .map(Self::flat_map_calls)
+                    .flatten()
                     .collect::<Vec<_>>();
                 ContractCall::Batch(ExecuteBatch(calls))
             }
+        }
+    }
+
+    fn flat_map_calls(call: &ContractCall) -> Vec<BatchCall> {
+        match call {
+            ContractCall::Transfer(transfer) => vec![BatchCall::Transfer(transfer.clone())],
+            ContractCall::Approval(approval) => vec![BatchCall::Approval(approval.clone())],
+            ContractCall::Unknown(data) => vec![BatchCall::Unknown(data.clone())],
+            ContractCall::TransferFrom(transfer_from) => vec![BatchCall::Unknown(transfer_from.build())],
+            ContractCall::Batch(batch) => batch.0.clone(),
         }
     }
 }
@@ -776,5 +801,5 @@ pub enum ContractCall {
     /// ExecuteBatch
     Batch(ExecuteBatch),
     /// Unknown
-    Unknown,
+    Unknown(Vec<u8>),
 }

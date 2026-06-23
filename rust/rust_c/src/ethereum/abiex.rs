@@ -94,8 +94,8 @@ pub extern "C" fn eth_abiex_parsed_get(parsed: PtrEthabiexParsed, index: u32) ->
                     let display = approval.into();
                     Response::success(display).c_ptr()
                 }
-                BatchCall::Unknown => {
-                    let display = DisplayETHAbiexParsed::unknown();
+                BatchCall::Unknown(ref data) => {
+                    let display = DisplayETHAbiexParsed::unknown(data);
                     Response::success(display).c_ptr()
                 }
             }
@@ -112,8 +112,8 @@ pub extern "C" fn eth_abiex_parsed_get(parsed: PtrEthabiexParsed, index: u32) ->
             let display = transfer_from.clone().into();
             Response::success(display).c_ptr()
         },
-        ContractCall::Unknown => {
-            let display = DisplayETHAbiexParsed::unknown();
+        ContractCall::Unknown(ref data) => {
+            let display = DisplayETHAbiexParsed::unknown(data);
             Response::success(display).c_ptr()
         },
         _  => {

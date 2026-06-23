@@ -700,11 +700,12 @@ impl Free for DisplayETHAbiexParsed {
 }
 
 impl DisplayETHAbiexParsed {
-    pub fn unknown() -> Self {
+    pub fn unknown(data: &[u8]) -> Self {
+        let hex_unknown = hex::encode(data);
         Self {
             eth_abiex_parsed_type: ETHAbiexParsedType::ETHABIEX_PARSED_TYPE_UNKNOWN,
             to: null_mut(),
-            value: null_mut(),
+            value: convert_c_char(hex_unknown),
             token_id: null_mut(),
         }
     }
