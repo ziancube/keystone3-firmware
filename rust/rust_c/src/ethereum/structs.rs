@@ -7,21 +7,21 @@ use crate::common::free::{Free, SimpleFree};
 use crate::common::structs::{Response, TransactionParseResult};
 use crate::common::types::{Ptr, PtrBytes, PtrString, PtrT};
 use crate::common::utils::convert_c_char;
+use crate::ethereum::abiex::ETHAbiexParsedType;
 use crate::{check_and_free_ptr, free_str_ptr, free_vec, impl_c_ptr, make_free_method};
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use app_ethereum::abi::{ContractData, ContractMethodParam};
 use app_ethereum::erc20::encode_erc20_transfer_calldata;
-use app_ethereum::structs::{ParsedEthereumTransaction, PersonalMessage, TypedData, Authorization};
+use app_ethereum::structs::{Authorization, ParsedEthereumTransaction, PersonalMessage, TypedData};
 use core::ptr::null_mut;
 use core::str::FromStr;
 use itertools::Itertools;
 use ur_registry::ethereum::eth_sign_request::DataType;
 use ur_registry::pb::protoc::EthTx;
-use crate::ethereum::abiex::ETHAbiexParsedType;
 
 #[repr(C)]
-pub struct CEthereumAuthorization{
+pub struct CEthereumAuthorization {
     pub chain_id: u32,
     pub address: PtrString,
     pub nonce: u64,
@@ -49,12 +49,20 @@ impl From<Authorization> for CEthereumAuthorization {
             r: if let Some(r) = auth.r {
                 r.as_bytes().to_vec().into()
             } else {
-                VecFFI{data: null_mut(), size: 0, cap: 0}
+                VecFFI {
+                    data: null_mut(),
+                    size: 0,
+                    cap: 0,
+                }
             },
             s: if let Some(s) = auth.s {
                 s.as_bytes().to_vec().into()
             } else {
-                VecFFI{data: null_mut(), size: 0, cap: 0}
+                VecFFI {
+                    data: null_mut(),
+                    size: 0,
+                    cap: 0,
+                }
             },
         }
     }
@@ -101,7 +109,8 @@ impl From<app_ethereum::structs::ParsedEthereumTransaction> for CParsedEthereumT
             tx_type: tx.tx_type,
             authorization: match tx.authorization_list {
                 Some(auth_list) => {
-                    let auths: Vec<CEthereumAuthorization> = auth_list.into_iter().map(|a| a.into()).collect();
+                    let auths: Vec<CEthereumAuthorization> =
+                        auth_list.into_iter().map(|a| a.into()).collect();
                     VecFFI::from(auths).c_ptr()
                 }
                 None => null_mut(),
@@ -451,8 +460,13 @@ impl From<TypedData> for DisplayETHTypedData {
             }
         }
 
-        let safe_tx_hash = message.get_safe_tx_hash();
-        let show_items = message.show_items.iter().map(|(k, v)| DisplayETHTypedDataItem::from((k, v))).collect::<Vec<_>>();
+        // let safe_tx_hash = message.get_safe_tx_hash();
+        let safe_tx_hash = "".to_string();
+        let show_items = message
+            .show_items
+            .iter()
+            .map(|(k, v)| DisplayETHTypedDataItem::from((k, v)))
+            .collect::<Vec<_>>();
         Self {
             name: to_ptr_string(message.name),
             version: to_ptr_string(message.version),
@@ -682,7 +696,6 @@ impl Free for DisplaySwapkitContractData {
         free_str_ptr!(self.expiration);
     }
 }
-
 
 #[repr(C)]
 pub struct DisplayETHAbiexParsed {
