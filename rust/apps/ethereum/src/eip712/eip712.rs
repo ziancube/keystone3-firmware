@@ -686,8 +686,25 @@ pub fn encode_field(
                     })?;
                     match param {
                         ParamType::Address => {
-                            Token::Address(serde_json::from_value(value.clone()).map_err(
-                                |err| Eip712Error::Message(format!("serde_json::from_value {err}")),
+                            let mut addr: String =
+                                serde_json::from_value(value.clone()).map_err(|err| {
+                                    Eip712Error::Message(format!("serde_json::from_value {err}"))
+                                })?;
+
+                            if addr.starts_with("0x") || addr.starts_with("0X") {
+                                addr = addr[2..].to_string();
+                            }
+
+                            if addr.len() > 40 {
+                                addr = addr[addr.len() - 40..].to_string();
+                            } else if addr.len() < 40 {
+                                addr = format!("{:0>40}", addr);
+                            }
+
+                            Token::Address(Address::from_str(&format!("0x{}", addr)).map_err(
+                                |err| {
+                                    Eip712Error::Message(format!("Failed to parse address {err}"))
+                                },
                             )?)
                         }
                         ParamType::Bytes => {
@@ -922,43 +939,43 @@ mod tests {
     #[test]
     fn test_hash_typed_message_with_data() {
         let json = serde_json::json!( {
-          "types": {
-            "EIP712Domain": [
-              {
-                "name": "name",
-                "type": "string"
-              },
-              {
-                "name": "version",
-                "type": "string"
-              },
-              {
-                "name": "chainId",
-                "type": "uint256"
-              },
-              {
-                "name": "verifyingContract",
-                "type": "address"
-              }
-            ],
-            "Message": [
-              {
-                "name": "data",
-                "type": "string"
-              }
-            ]
-          },
-          "primaryType": "Message",
           "domain": {
-            "name": "example.metamask.io",
-            "version": "1",
             "chainId": "1",
-            "verifyingContract": "0x0000000000000000000000000000000000000000"
+            "verifyingContract": "0xaA47493Ae9D756Cf8D521113730e73B3BC2bbB7c"
           },
           "message": {
-            "data": "Hello!"
+            "baseGas": 0,
+            "data": "0x",
+            "gasPrice": 0,
+            "gasToken": "0000000000000000000000000000000000000000000000000000000000000000",
+            "nonce": "0",
+            "operation": 0,
+            "refundReceiver": "0000000000000000000000000000000000000000000000000000000000000000",
+            "safeTxGas": 0,
+            "to": "0x2B97628d46d90afde019cB21cE545B335C6B5Ac0",
+            "value": "0x5af3107a4000"
+          },
+          "primaryType": "SafeTx",
+          "types": {
+            "EIP712Domain": [
+              { "name": "chainId", "type": "uint256" },
+              { "name": "verifyingContract", "type": "address" }
+            ],
+            "SafeTx": [
+              { "name": "to", "type": "address" },
+              { "name": "value", "type": "uint256" },
+              { "name": "data", "type": "bytes" },
+              { "name": "operation", "type": "uint8" },
+              { "name": "safeTxGas", "type": "uint256" },
+              { "name": "baseGas", "type": "uint256" },
+              { "name": "gasPrice", "type": "uint256" },
+              { "name": "gasToken", "type": "address" },
+              { "name": "refundReceiver", "type": "address" },
+              { "name": "nonce", "type": "uint256" }
+            ]
           }
-        });
+        }
+        );
 
         let typed_data: TypedData = serde_json::from_value(json).unwrap();
 
