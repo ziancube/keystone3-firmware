@@ -358,6 +358,13 @@ fn flatten_domain(domain: &EIP712Domain) -> BTreeMap<String, String> {
 }
 
 /// Flattens nested JSON structures to leaf elements with dot/bracket notation
+fn json_value_to_display(value: &serde_json::Value) -> String {
+    match value {
+        serde_json::Value::String(s) => s.clone(),
+        _ => value.to_string(),
+    }
+}
+
 fn flatten_message(
     primary_type: &str,
     message: &serde_json::Value,
@@ -392,13 +399,13 @@ fn flatten_message(
                                 result.extend(nested);
                             } else {
                                 // Array of primitives
-                                result.insert(array_path, item.to_string());
+                                result.insert(array_path, json_value_to_display(item));
                             }
                         }
                     }
                 } else {
                     // It's a primitive type, add to result
-                    result.insert(field_path, value.to_string());
+                    result.insert(field_path, json_value_to_display(value));
                 }
             }
         }
