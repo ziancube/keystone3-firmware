@@ -1,8 +1,8 @@
 use core::str::FromStr;
 
 use crate::eip1559_transaction::ParsedEIP1559Transaction;
-use crate::eip7702_transaction::ParsedEIP7702Transaction;
 use crate::eip712::eip712::TypedData as Eip712TypedData;
+use crate::eip7702_transaction::ParsedEIP7702Transaction;
 use crate::errors::Result;
 use crate::{address::generate_address, eip712::eip712::Eip712};
 use crate::{Bytes, ParsedLegacyTransaction};
@@ -17,7 +17,7 @@ use ethabi::{encode, Address, Token};
 use ethereum_types::{H160, H256, U256};
 use hex;
 use rlp::{Decodable, DecoderError, Encodable, Rlp};
-use serde_json::{Value};
+use serde_json::Value;
 
 #[derive(Clone)]
 pub enum TransactionAction {
@@ -108,12 +108,12 @@ impl Decodable for Authorization {
 impl Encodable for Authorization {
     fn rlp_append(&self, s: &mut rlp::RlpStream) {
         s.begin_list(6)
-        .append(&self.chain_id)
-        .append(&self.address)
-        .append(&self.nonce)
-        .append(&self.v)
-        .append(&self.r)
-        .append(&self.s);
+            .append(&self.chain_id)
+            .append(&self.address)
+            .append(&self.nonce)
+            .append(&self.v)
+            .append(&self.r)
+            .append(&self.s);
     }
 }
 
@@ -393,8 +393,8 @@ impl TypedData {
 
 impl From<Eip712TypedData> for TypedData {
     fn from(value: Eip712TypedData) -> Self {
-        let domain_separator = value.domain.separator(Some(&value.types));
-        let message_hash = value.struct_hash().unwrap();
+        // let domain_separator = value.domain.separator(Some(&value.types));
+        // let message_hash = value.struct_hash().unwrap();
         TypedData {
             name: value.domain.name.unwrap_or_default(),
             version: value.domain.version.unwrap_or_default(),
@@ -420,10 +420,13 @@ impl From<Eip712TypedData> for TypedData {
                 s
             }),
             primary_type: value.primary_type,
-            message: serde_json::to_string_pretty(&value.message).unwrap_or("".to_string()),
+            //message: serde_json::to_string_pretty(&value.message).unwrap_or("".to_string()),
+            message: "".to_string(),
             from: None,
-            message_hash: hex::encode(&message_hash),
-            domain_separator: hex::encode(&domain_separator),
+            // message_hash: hex::encode(&message_hash),
+            // domain_separator: hex::encode(&domain_separator),
+            message_hash: "".to_string(),
+            domain_separator: "".to_string(),
             show_items: value.show_items,
         }
     }
@@ -436,8 +439,8 @@ pub mod tests {
 
     extern crate std;
     use crate::structs::TypedData;
-    use std::string::ToString;
     use alloc::collections::btree_map::BTreeMap;
+    use std::string::ToString;
     #[test]
     fn test_signature() {
         {
