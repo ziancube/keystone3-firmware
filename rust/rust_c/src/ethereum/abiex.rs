@@ -1,5 +1,7 @@
 use alloc::string::ToString;
 use alloc::boxed::Box;
+use alloc::vec::Vec;
+use itertools::Itertools;
 use crate::clog::log_message;
 use crate::common::errors::{ErrorCodes, RustCError};
 use crate::common::ffi::CSliceFFI;
@@ -13,7 +15,7 @@ use crate::{
 
 use alloc::format;
 
-use app_ethereum::abiex::{self, BatchCall, ContractCall};
+use app_ethereum::abiex::{self, ContractCall};
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -41,16 +43,16 @@ pub extern "C" fn eth_abiex_parse(
     let data = unsafe { recover_c_array(data) };
     let address: [u8; 20] = address[..20].try_into().unwrap();
 
-    let call = match abiex::contract_call_parse(chain_id, &address, &data) {
-        Ok(call) => call,
+    let calls = match abiex::contract_call_parse(chain_id, &address, &data) {
+        Ok(calls) => calls,
         Err(e) => {
             log_message(&format!("contract_call_parse error: {:?}", e));
             return -1;
         }
     };
-    let s = serde_json::to_string(&call).unwrap();
+    let s = serde_json::to_string(&calls).unwrap();
     log_message(&s);
-    let boxed = Box::new(call);
+    let boxed = Box::new(calls);
     unsafe {
         *parsed = Box::into_raw(boxed) as PtrEthabiexParsed;
     }
@@ -62,17 +64,10 @@ pub extern "C" fn eth_abiex_parsed_count(parsed: PtrEthabiexParsed, count: Ptr<u
     if parsed.is_null() || count.is_null() {
         return -1;
     }
-    let call: &ContractCall = extract_ptr_with_type!(parsed, ContractCall);
-
-    match call {
-        ContractCall::Batch(ref batch) => unsafe {
-            *count = batch.0.len() as u32;
-        },
-        _ => unsafe {
-            *count = 1;
-        },
+    let calls: &Vec<ContractCall> = extract_ptr_with_type!(parsed, Vec<ContractCall>);
+    unsafe {
+        *count = calls.len() as u32;
     }
-
     0
 }
 
@@ -81,25 +76,15 @@ pub extern "C" fn eth_abiex_parsed_get(parsed: PtrEthabiexParsed, index: u32) ->
     if parsed.is_null() {
         return Response::from(RustCError::InvalidData("Invalid param".to_string())).c_ptr();
     }
-    let call: &ContractCall = extract_ptr_with_type!(parsed, ContractCall);
+    let calls: &Vec<ContractCall> = extract_ptr_with_type!(parsed, Vec<ContractCall>);
+    let call = match calls.get(index as usize) {
+        Some(call) => call,
+        None => {
+            return Response::from(RustCError::InvalidData("Invalid index".to_string())).c_ptr();
+        }
+    };
+
     match call {
-        ContractCall::Batch(ref batch) if index < batch.0.len() as u32 => {
-            let item = batch.0[index as usize].clone();
-            match item {
-                BatchCall::Transfer(transfer) => {
-                    let display = transfer.into();
-                    Response::success(display).c_ptr()
-                }
-                BatchCall::Approval(approval) => {
-                    let display = approval.into();
-                    Response::success(display).c_ptr()
-                }
-                BatchCall::Unknown(ref data) => {
-                    let display = DisplayETHAbiexParsed::unknown(data);
-                    Response::success(display).c_ptr()
-                }
-            }
-        },
         ContractCall::Transfer(ref transfer) if index == 0 => {
             let display = transfer.clone().into();
             Response::success(display).c_ptr()

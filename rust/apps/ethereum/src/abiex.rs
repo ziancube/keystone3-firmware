@@ -1,5 +1,3 @@
-use core::str::FromStr;
-
 use crate::bindings;
 use alloc::boxed::Box;
 use alloc::ffi::CString;
@@ -7,8 +5,8 @@ use alloc::format;
 use alloc::string::ToString;
 use alloc::vec;
 use alloc::{string::String, vec::Vec};
-use anyhow::Ok as Okk;
 use ethabi::ethereum_types::U256;
+use crate::errors::{EthereumError, Result};
 
 struct TokenInfo {
     symbol: String,
@@ -26,22 +24,52 @@ fn get_token_info(chain_id: u64, address: &[u8; 20]) -> TokenInfo {
     TokenInfo { symbol, decimals }
 }
 
-fn amount_format(token_info: &TokenInfo, amount: U256) -> String {
-    // format with decimals, e.g. decimals 8, amount 110000000 -> 1.1
-    if amount == U256::max_value() {
+fn amount_format(token_info: &TokenInfo, amount: &U256) -> String {
+    if amount == &U256::max_value() {
         return "unlimited".to_string();
     }
 
-    let units = 10u128.pow(token_info.decimals);
-    // 整数部分
-    let integer = amount / units;
-    // 小数部分
-    let decimal = amount % units;
+    // 10^decimals 作为 base（U256）
+    let decimals = token_info.decimals;
+    let ten = U256::from(10u64);
 
-    if decimal == U256::zero() {
+    // 10^decimals，注意要用 U256 的 pow / 自己循环相乘
+    let mut base = U256::one();
+    for _ in 0..decimals {
+        base *= ten;
+    }
+
+    let integer = amount / base;
+    let decimal = amount % base;
+
+    // 纯整数（小数部分为 0）
+    if decimal.is_zero() {
+        return format!("{} {}", integer, token_info.symbol);
+    }
+
+    // 将 decimal 转为字符串，再根据 decimals 补零
+    // decimal 最大是 10^decimals - 1，转成十进制字符串
+    let mut decimal_str = decimal.to_string();
+
+    // 需要的位数：decimals
+    let decimals_usize = decimals as usize;
+    if decimal_str.len() < decimals_usize {
+        let zeros_to_pad = decimals_usize - decimal_str.len();
+        let padding = "0".repeat(zeros_to_pad);
+        decimal_str = format!("{}{}", padding, decimal_str);
+    }
+
+    // 可选：去掉小数部分末尾多余的 0（比如 1.230000 -> 1.23）
+    // 如果你希望保留所有位，比如始终显示 1.23000000，就注释掉这一段
+    while decimal_str.ends_with('0') {
+        decimal_str.pop();
+    }
+
+    // 处理一下全是 0 的情况（理论上 is_zero 已经在上面返回了，这里只是保险）
+    if decimal_str.is_empty() {
         format!("{} {}", integer, token_info.symbol)
     } else {
-        format!("{}.{} {}", integer, decimal, token_info.symbol)
+        format!("{}.{} {}", integer, decimal_str, token_info.symbol)
     }
 }
 
@@ -49,58 +77,49 @@ pub fn contract_call_parse(
     chain_id: u64,
     address: &[u8; 20],
     data: &[u8],
-) -> anyhow::Result<ContractCall> {
+) -> Result<Vec<ContractCall>> {
     if data.len() < 4 {
-        return Err(anyhow::anyhow!("invalid data"));
+        return Err(EthereumError::InvalidContractABI);
     }
 
-    let selector = &data[..4].try_into()?;
+    let selector = &data[..4].try_into().map_err(|_| EthereumError::InvalidContractABI)?;
     let params = &data[4..];
 
-    let call = match selector {
+    let calls = match selector {
         Erc20Transfer::SELECTOR => {
-            let transfer = Erc20Transfer::parse(chain_id, address, params)?;
-            ContractCall::Transfer(transfer)
+            Erc20Transfer::parse(chain_id, address, params)?
         }
         Erc20Approval::SELECTOR => {
-            let approval = Erc20Approval::parse(chain_id, address, params)?;
-            ContractCall::Approval(approval)
+            Erc20Approval::parse(chain_id, address, params)?
         }
         Permit2Approval::SELECTOR => {
-            let approve = Permit2Approval::parse(chain_id, address, params)?;
-            ContractCall::Approval(approve.into())
+            Permit2Approval::parse(chain_id, address, params)?
         }
         Erc721TransferFrom::SELECTOR => {
-            let transfer_from = Erc721TransferFrom::parse(chain_id, address, params)?;
-            ContractCall::TransferFrom(transfer_from)
+            Erc721TransferFrom::parse(chain_id, address, params)?
         }
         // safeTransferFrom(address from,address to,uint256 tokenId)
         // 0x42842e0e
         &[0x42, 0x84, 0x2e, 0x0e] => {
-            let transfer_from = Erc721TransferFrom::parse(chain_id, address, params)?;
-            ContractCall::TransferFrom(transfer_from)
+            Erc721TransferFrom::parse(chain_id, address, params)?
         }
         Erc721SafeTransferFrom::SELECTOR => {
-            let safe_transfer_from = Erc721SafeTransferFrom::parse(chain_id, address, params)?;
-            ContractCall::TransferFrom(safe_transfer_from.into())
+            Erc721SafeTransferFrom::parse(chain_id, address, params)?
         }
         ExecuteBatch::SELECTOR => {
-            let execute_batch = ExecuteBatch::parse(chain_id, address, params)?;
-            ContractCall::Batch(execute_batch)
+            ExecuteBatch::parse(chain_id, address, params)?
         }
         // executeBatchAndSkipFailures(Call[] calls)
         // 0x27bea2c6
         &[0x27, 0xbe, 0xa2, 0xc6] => {
-            let execute_batch = ExecuteBatch::parse(chain_id, address, params)?;
-            ContractCall::Batch(execute_batch)
+            ExecuteBatch::parse(chain_id, address, params)?
         }
         HandleOps::SELECTOR => {
-            let ops = HandleOps::parse(chain_id, address, params)?;
-            ops.into_contract_call()
+            HandleOps::parse(chain_id, address, params)?
         }
-        _ => ContractCall::Unknown(params.to_vec()),
+        _ => vec![ContractCall::Unknown(data.to_vec())],
     };
-    Ok(call)
+    Ok(calls)
 }
 
 pub trait ContractCallable {
@@ -110,11 +129,11 @@ pub trait ContractCallable {
         chain_id: u64,
         address: &[u8; 20],
         tokens: &[ethabi::Token],
-    ) -> anyhow::Result<Self>
+    ) -> Result<Vec<ContractCall>>
     where
         Self: Sized;
 
-    fn parse(chain_id: u64, address: &[u8; 20], data: &[u8]) -> anyhow::Result<Self>
+    fn parse(chain_id: u64, address: &[u8; 20], data: &[u8]) -> Result<Vec<ContractCall>>
     where
         Self: Sized,
     {
@@ -122,9 +141,9 @@ pub trait ContractCallable {
         let inputs = method.inputs.clone();
         let tokens = method
             .decode_input(data)
-            .map_err(|_| anyhow::anyhow!("invalid data"))?;
+            .map_err(|_| EthereumError::InvalidContractABI)?;
         if inputs.len() != tokens.len() {
-            return Err(anyhow::anyhow!("invalid data"));
+            return Err(EthereumError::InvalidContractABI);
         }
         Self::from_tokens(chain_id, address, &tokens)
     }
@@ -171,18 +190,22 @@ impl ContractCallable for Erc20Transfer {
         chain_id: u64,
         address: &[u8; 20],
         tokens: &[ethabi::Token],
-    ) -> anyhow::Result<Self> {
-        let to = tokens.get(0).ok_or(anyhow::anyhow!("invalid data"))?;
-        let amount = tokens.get(1).ok_or(anyhow::anyhow!("invalid data"))?;
-        let (to, amount) = match (to, amount) {
-            (ethabi::Token::Address(to), ethabi::Token::Uint(amount)) => Okk((to, amount)),
-            _ => return Err(anyhow::anyhow!("invalid data")),
-        }?;
+    ) -> Result<Vec<ContractCall>> {
+        let to = tokens.get(0).ok_or(EthereumError::InvalidContractABI)?;
+        let amount = tokens.get(1).ok_or(EthereumError::InvalidContractABI)?;
+        let to = match to {
+            ethabi::Token::Address(to) => to,
+            _ => return Err(EthereumError::InvalidContractABI),
+        };
+        let amount = match amount {
+            ethabi::Token::Uint(amount) => amount,
+            _ => return Err(EthereumError::InvalidContractABI),
+        };
         let to = format!("0x{:x}", to);
         let token_info = get_token_info(chain_id, address);
-        let amount = amount_format(&token_info, amount.into());
+        let amount = amount_format(&token_info, amount);
 
-        Ok(Self { to, amount })
+        Ok(vec![ContractCall::Transfer(Erc20Transfer { to, amount })])
     }
 }
 
@@ -226,15 +249,18 @@ impl ContractCallable for Erc20Approval {
         chain_id: u64,
         address: &[u8; 20],
         tokens: &[ethabi::Token],
-    ) -> anyhow::Result<Self> {
-        let spender = tokens.get(0).ok_or(anyhow::anyhow!("invalid data"))?;
-        let amount = tokens.get(1).ok_or(anyhow::anyhow!("invalid data"))?;
-        let (spender, amount) = match (spender, amount) {
-            (ethabi::Token::Address(spender), ethabi::Token::Uint(amount)) => {
-                Okk((spender, amount))
-            }
-            _ => return Err(anyhow::anyhow!("invalid data")),
-        }?;
+    ) -> Result<Vec<ContractCall>> {
+        let spender = tokens.get(0).ok_or(EthereumError::InvalidContractABI)?;
+        let amount = tokens.get(1).ok_or(EthereumError::InvalidContractABI)?;
+        let spender = match spender {
+            ethabi::Token::Address(spender) => spender,
+            _ => return Err(EthereumError::InvalidContractABI),
+        };
+        let amount = match amount {
+            ethabi::Token::Uint(amount) => amount,
+            _ => return Err(EthereumError::InvalidContractABI),
+        };
+
         let spender = format!("0x{:x}", spender);
         let token_info = get_token_info(chain_id, address);
         let mut unlimited_value: U256 = 100000000000u128.into();
@@ -245,7 +271,7 @@ impl ContractCallable for Erc20Approval {
             amount_format(&token_info, amount.into())
         };
 
-        Ok(Self { spender, amount })
+        Ok(vec![ContractCall::Approval(Erc20Approval { spender, amount })])
     }
 }
 
@@ -310,34 +336,41 @@ impl ContractCallable for Permit2Approval {
         chain_id: u64,
         address: &[u8; 20],
         tokens: &[ethabi::Token],
-    ) -> anyhow::Result<Self>
+    ) -> Result<Vec<ContractCall>>
     where
         Self: Sized,
     {
-        let token = tokens.get(0).ok_or(anyhow::anyhow!("invalid data"))?;
-        let spender = tokens.get(1).ok_or(anyhow::anyhow!("invalid data"))?;
-        let amount = tokens.get(2).ok_or(anyhow::anyhow!("invalid data"))?;
-        let expiration = tokens.get(3).ok_or(anyhow::anyhow!("invalid data"))?;
-        let (token, spender, amount, expiration) = match (token, spender, amount, expiration) {
-            (
-                ethabi::Token::Address(token),
-                ethabi::Token::Address(spender),
-                ethabi::Token::Uint(amount),
-                ethabi::Token::Uint(expiration),
-            ) => Okk((token, spender, amount, expiration)),
-            _ => return Err(anyhow::anyhow!("invalid data")),
-        }?;
+        let token = tokens.get(0).ok_or(EthereumError::InvalidContractABI)?;
+        let spender = tokens.get(1).ok_or(EthereumError::InvalidContractABI)?;
+        let amount = tokens.get(2).ok_or(EthereumError::InvalidContractABI)?;
+        let expiration = tokens.get(3).ok_or(EthereumError::InvalidContractABI)?;
+
+        let token = match token {
+            ethabi::Token::Address(token) => token,
+            _ => return Err(EthereumError::InvalidContractABI),
+        };
+        let spender = match spender {
+            ethabi::Token::Address(spender) => spender,
+            _ => return Err(EthereumError::InvalidContractABI),
+        };
+        let amount = match amount {
+            ethabi::Token::Uint(amount) => amount,
+            _ => return Err(EthereumError::InvalidContractABI),
+        };
+        let expiration = match expiration {
+            ethabi::Token::Uint(expiration) => expiration,
+            _ => return Err(EthereumError::InvalidContractABI),
+        };
+
         let token = format!("0x{:x}", token);
         let spender = format!("0x{:x}", spender);
         let token_info = get_token_info(chain_id, address);
         let amount = amount_format(&token_info, amount.into());
         let expiration = expiration.to_string();
-        Ok(Self {
-            token,
+        Ok(vec![ContractCall::Approval(Erc20Approval {
             spender,
             amount,
-            expiration,
-        })
+        })])
     }
 }
 
@@ -346,22 +379,6 @@ pub struct Erc721TransferFrom {
     pub from: String,
     pub to: String,
     pub token_id: String,
-}
-
-impl Erc721TransferFrom {
-    pub fn build(&self) -> Vec<u8> {
-        let method = Self::method();
-        let from: [u8; 20] = hex::decode(&self.from).unwrap().try_into().unwrap();
-        let to: [u8; 20] = hex::decode(&self.to).unwrap().try_into().unwrap();
-        let inputs = vec![
-            ethabi::Token::Address(ethabi::Address::from(from)),
-            ethabi::Token::Address(ethabi::Address::from(to)),
-            ethabi::Token::Uint(U256::from_str(&self.token_id).unwrap()),
-        ];
-        let mut data = Self::SELECTOR.to_vec();
-        data.extend_from_slice(&method.encode_input(&inputs).unwrap().as_slice());
-        data
-    }
 }
 
 impl ContractCallable for Erc721TransferFrom {
@@ -404,26 +421,32 @@ impl ContractCallable for Erc721TransferFrom {
         _chain_id: u64,
         _address: &[u8; 20],
         tokens: &[ethabi::Token],
-    ) -> anyhow::Result<Self>
+    ) -> Result<Vec<ContractCall>>
     where
         Self: Sized,
     {
-        let from = tokens.get(0).ok_or(anyhow::anyhow!("invalid data"))?;
-        let to = tokens.get(1).ok_or(anyhow::anyhow!("invalid data"))?;
-        let token_id = tokens.get(2).ok_or(anyhow::anyhow!("invalid data"))?;
-        let (from, to, token_id) = match (from, to, token_id) {
-            (
-                ethabi::Token::Address(from),
-                ethabi::Token::Address(to),
-                ethabi::Token::Uint(token_id),
-            ) => Okk((from, to, token_id)),
-            _ => return Err(anyhow::anyhow!("invalid data")),
-        }?;
+        let from = tokens.get(0).ok_or(EthereumError::InvalidContractABI)?;
+        let to = tokens.get(1).ok_or(EthereumError::InvalidContractABI)?;
+        let token_id = tokens.get(2).ok_or(EthereumError::InvalidContractABI)?;
+
+        let from = match from {
+            ethabi::Token::Address(from) => from,
+            _ => return Err(EthereumError::InvalidContractABI),
+        };
+        let to = match to {
+            ethabi::Token::Address(to) => to,
+            _ => return Err(EthereumError::InvalidContractABI),
+        };
+        let token_id = match token_id {
+            ethabi::Token::Uint(token_id) => token_id,
+            _ => return Err(EthereumError::InvalidContractABI),
+        };
+
         let from = format!("0x{:x}", from);
         let to = format!("0x{:x}", to);
         let token_id = token_id.to_string();
 
-        Ok(Self { from, to, token_id })
+        Ok(vec![ContractCall::TransferFrom(Erc721TransferFrom { from, to, token_id })])
     }
 }
 
@@ -487,45 +510,42 @@ impl ContractCallable for Erc721SafeTransferFrom {
         _chain_id: u64,
         _address: &[u8; 20],
         tokens: &[ethabi::Token],
-    ) -> anyhow::Result<Self>
+    ) -> Result<Vec<ContractCall>>
     where
         Self: Sized,
     {
-        let from = tokens.get(0).ok_or(anyhow::anyhow!("invalid data"))?;
-        let to = tokens.get(1).ok_or(anyhow::anyhow!("invalid data"))?;
-        let token_id = tokens.get(2).ok_or(anyhow::anyhow!("invalid data"))?;
-        let (from, to, token_id) = match (from, to, token_id) {
-            (
-                ethabi::Token::Address(from),
-                ethabi::Token::Address(to),
-                ethabi::Token::Uint(token_id),
-            ) => Okk((from, to, token_id)),
-            _ => return Err(anyhow::anyhow!("invalid data")),
-        }?;
+        let from = tokens.get(0).ok_or(EthereumError::InvalidContractABI)?;
+        let to = tokens.get(1).ok_or(EthereumError::InvalidContractABI)?;
+        let token_id = tokens.get(2).ok_or(EthereumError::InvalidContractABI)?;
+
+        let from = match from {
+            ethabi::Token::Address(from) => from,
+            _ => return Err(EthereumError::InvalidContractABI),
+        };
+        let to = match to {
+            ethabi::Token::Address(to) => to,
+            _ => return Err(EthereumError::InvalidContractABI),
+        };
+        let token_id = match token_id {
+            ethabi::Token::Uint(token_id) => token_id,
+            _ => return Err(EthereumError::InvalidContractABI),
+        };
         let from = format!("0x{:x}", from);
         let to = format!("0x{:x}", to);
         let token_id = token_id.to_string();
-        Ok(Self { from, to, token_id })
+        Ok(vec![ContractCall::TransferFrom(Erc721TransferFrom { from, to, token_id })])
     }
 }
 
-#[derive(Debug, Clone, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-pub enum BatchCall {
-    Transfer(Erc20Transfer),
-    Approval(Erc20Approval),
-    Unknown(Vec<u8>),
-}
 
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct ExecuteBatch(pub Vec<BatchCall>);
+pub struct ExecuteBatch;
 
-impl BatchCall {
-    pub fn parse_call(
+impl ExecuteBatch {
+    pub fn parse_batch_call(
         chain_id: u64,
         _address: &[u8; 20],
         token: &ethabi::Token,
-    ) -> anyhow::Result<Self> {
+    ) -> Result<Vec<ContractCall>> {
         /* struct Call {
          *     address target;
          *     uint256 value;
@@ -535,26 +555,28 @@ impl BatchCall {
         let call = if let ethabi::Token::Tuple(call) = token {
             call
         } else {
-            return Err(anyhow::anyhow!("Unknown call"));
+            return Err(EthereumError::InvalidContractABI);
         };
 
-        let target = call.get(0).ok_or(anyhow::anyhow!("invalid data"))?;
-        let value = call.get(1).ok_or(anyhow::anyhow!("invalid data"))?;
-        let data = call.get(2).ok_or(anyhow::anyhow!("invalid data"))?;
-        let (target, _value, data) = match (target, value, data) {
-            (
-                ethabi::Token::Address(target),
-                ethabi::Token::Uint(value),
-                ethabi::Token::Bytes(data),
-            ) => Okk((target, value, data)),
-            _ => return Err(anyhow::anyhow!("Unknown call")),
-        }?;
-        match contract_call_parse(chain_id, &target.to_fixed_bytes(), &data)? {
-            ContractCall::Transfer(erc20_transfer) => Ok(Self::Transfer(erc20_transfer)),
-            ContractCall::Approval(erc20_approval) => Ok(Self::Approval(erc20_approval)),
-            // ERC721: TransferFrom, SafeTransferFrom as Unknown
-            _ => Ok(Self::Unknown(data.to_vec())),
-        }
+        let target = call.get(0).ok_or(EthereumError::InvalidContractABI)?;
+        let value = call.get(1).ok_or(EthereumError::InvalidContractABI)?;
+        let data = call.get(2).ok_or(EthereumError::InvalidContractABI)?;
+
+        let target = match target {
+            ethabi::Token::Address(target) => target,
+            _ => return Err(EthereumError::InvalidContractABI),
+        };
+
+        let value = match value {
+            ethabi::Token::Uint(value) => value,
+            _ => return Err(EthereumError::InvalidContractABI),
+        };
+        let data = match data {
+            ethabi::Token::Bytes(data) => data,
+            _ => return Err(EthereumError::InvalidContractABI),
+        };
+
+        contract_call_parse(chain_id, &target.to_fixed_bytes(), &data)
     }
 }
 
@@ -601,65 +623,27 @@ impl ContractCallable for ExecuteBatch {
         chain_id: u64,
         address: &[u8; 20],
         tokens: &[ethabi::Token],
-    ) -> anyhow::Result<Self>
+    ) -> Result<Vec<ContractCall>>
     where
         Self: Sized,
     {
-        let calls = tokens.get(0).ok_or(anyhow::anyhow!("invalid data"))?;
+        let calls = tokens.get(0).ok_or(EthereumError::InvalidContractABI)?;
 
         let calls = if let ethabi::Token::Array(calls) = calls {
             calls
         } else {
-            return Err(anyhow::anyhow!("invalid data"));
+            return Err(EthereumError::InvalidContractABI);
         };
-        // calls.iter().map(|call| {
-        //     let parsed = match BatchCall::parse_call(call) {
-        //         Ok(parsed) => parsed,
-        //         _ => return Err(anyhow::anyhow!("invalid data")),
-        //     };
-        // }).filter_map(Result::ok).collect::<Vec<_>>())
 
-        let calls = calls
-            .iter()
-            .map(|call| {
-                BatchCall::parse_call(chain_id, address, call).unwrap_or(BatchCall::Unknown(Vec::new()))
-            })
-            .collect::<Vec<_>>();
-        Ok(Self(calls))
-    }
-}
-
-struct HandleOps {
-    ops: Vec<ContractCall>,
-}
-
-impl HandleOps {
-    pub fn into_contract_call(&self) -> ContractCall {
-        match self.ops.len() {
-            0 => panic!("ops is empty"),
-            1 => self.ops[0].clone(),
-            _ => {
-                let calls = self
-                    .ops
-                    .iter()
-                    .map(Self::flat_map_calls)
-                    .flatten()
-                    .collect::<Vec<_>>();
-                ContractCall::Batch(ExecuteBatch(calls))
-            }
+        let mut batch_calls = vec![];
+        for call in calls.iter() {
+            batch_calls.extend_from_slice(&ExecuteBatch::parse_batch_call(chain_id, address, call)?);
         }
-    }
-
-    fn flat_map_calls(call: &ContractCall) -> Vec<BatchCall> {
-        match call {
-            ContractCall::Transfer(transfer) => vec![BatchCall::Transfer(transfer.clone())],
-            ContractCall::Approval(approval) => vec![BatchCall::Approval(approval.clone())],
-            ContractCall::Unknown(data) => vec![BatchCall::Unknown(data.clone())],
-            ContractCall::TransferFrom(transfer_from) => vec![BatchCall::Unknown(transfer_from.build())],
-            ContractCall::Batch(batch) => batch.0.clone(),
-        }
+        Ok(batch_calls)
     }
 }
+
+struct HandleOps;
 
 impl ContractCallable for HandleOps {
     // handleOps(PackedUserOperation[] ops)
@@ -719,16 +703,14 @@ impl ContractCallable for HandleOps {
         chain_id: u64,
         address: &[u8; 20],
         tokens: &[ethabi::Token],
-    ) -> anyhow::Result<Self>
-    where
-        Self: Sized,
+    ) -> Result<Vec<ContractCall>>
     {
-        let ops = tokens.get(0).ok_or(anyhow::anyhow!("invalid data"))?;
-        let beneficiary = tokens.get(1).ok_or(anyhow::anyhow!("invalid data"))?;
+        let ops = tokens.get(0).ok_or(EthereumError::InvalidContractABI)?;
+        let beneficiary = tokens.get(1).ok_or(EthereumError::InvalidContractABI)?;
         let ops = if let ethabi::Token::Array(ops) = ops {
             ops
         } else {
-            return Err(anyhow::anyhow!("invalid data"));
+            return Err(EthereumError::InvalidContractABI);
         };
 
         let mut calls = Vec::new();
@@ -736,20 +718,19 @@ impl ContractCallable for HandleOps {
             let op = if let ethabi::Token::Tuple(op) = op {
                 op
             } else {
-                return Err(anyhow::anyhow!("invalid data"));
+                return Err(EthereumError::InvalidContractABI);
             };
-            let data = op.get(3).ok_or(anyhow::anyhow!("invalid data"))?;
+            let data = op.get(3).ok_or(EthereumError::InvalidContractABI)?;
             let data = if let ethabi::Token::Bytes(data) = data {
                 data
             } else {
-                return Err(anyhow::anyhow!("invalid data"));
+                return Err(EthereumError::InvalidContractABI);
             };
 
             let call = contract_call_parse(chain_id, address, data)?;
-            calls.push(call);
+            calls.extend_from_slice(&call);
         }
-
-        Ok(Self { ops: calls })
+        Ok(calls)
     }
 }
 
@@ -798,8 +779,6 @@ pub enum ContractCall {
     Approval(Erc20Approval),
     /// ERC721: TransferFrom
     TransferFrom(Erc721TransferFrom),
-    /// ExecuteBatch
-    Batch(ExecuteBatch),
     /// Unknown
     Unknown(Vec<u8>),
 }
