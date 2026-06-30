@@ -64,7 +64,8 @@ impl TxParser for WrappedPsbt {
             ChildNumber::Hardened { index } => match index {
                 0 => Ok(Network::Bitcoin),
                 1 => Ok(Network::BitcoinTestnet),
-                60 => Ok(Network::AvaxBtcBridge),
+                //60 => Ok(Network::AvaxBtcBridge),
+                3 => Ok(Network::Dogecoin),
                 _ => Err(BitcoinError::InvalidTransaction(format!(
                     "unknown network {}",
                     index

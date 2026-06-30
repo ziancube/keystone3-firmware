@@ -34,6 +34,7 @@ const LTC_PREFIX: &str = "49'/2'/0'";
 const BCH_PREFIX: &str = "44'/145'/0'";
 const DASH_PREFIX: &str = "44'/5'/0'";
 const SOL_PREFIX: &str = "44'/501'";
+const DOGE_PREFIX: &str = "44'/3'/0'";
 
 pub fn generate_crypto_multi_accounts(
     master_fingerprint: [u8; 4],
@@ -55,6 +56,7 @@ pub fn generate_crypto_multi_accounts(
         LTC_PREFIX.to_string(),
         BCH_PREFIX.to_string(),
         DASH_PREFIX.to_string(),
+        DOGE_PREFIX.to_string(),
     ];
     for ele in extended_public_keys {
         match ele.get_path() {
