@@ -1,5 +1,7 @@
 use crate::common::errors::ErrorCodes;
 use crate::common::errors::RustCError;
+use crate::common::ffi::{CSliceFFI, VecFFI};
+use crate::common::free;
 use crate::common::free::Free;
 use crate::common::structs::Response;
 use crate::common::structs::{SimpleResponse, TransactionCheckResult, TransactionParseResult};
@@ -13,6 +15,8 @@ use alloc::slice;
 use alloc::string::{String, ToString};
 use cty::c_char;
 use serde;
+use ur_registry::extend::keypal_crypto_multi_accounts_request::AccountRequest;
+use ur_registry::extend::keypal_crypto_multi_accounts_request::KeypalCryptoMultiAccountsRequest;
 use ur_registry::keypal::keypal_device_info::KeypalDeviceInfo;
 use ur_registry::keypal::keypal_device_signature::KeypalDeviceSignature;
 use ur_registry::keypal::keypal_device_verify_request::KeypalDeviceVerifyRequest;
@@ -339,4 +343,71 @@ pub extern "C" fn vec_u8_data_mut(ptr: *mut RustVecU8) -> *mut c_uchar {
         return core::ptr::null_mut();
     }
     unsafe { as_vec_mut(ptr).as_mut_ptr() }
+}
+
+#[repr(C)]
+pub struct KeypalAccountsRequest {
+    pub path: PtrString,
+    pub curve: u32,
+    pub algo: u32,
+    pub chain_type: PtrString,
+}
+
+impl From<AccountRequest> for KeypalAccountsRequest {
+    fn from(request: AccountRequest) -> Self {
+        KeypalAccountsRequest {
+            path: convert_c_char(request.get_key_path()),
+            curve: request.get_curve_or_default() as u32,
+            algo: request.get_algo_or_default() as u32,
+            chain_type: convert_c_char(request.get_chain_type().unwrap_or_default()),
+        }
+    }
+}
+
+impl free::Free for KeypalAccountsRequest {
+    fn free(&self) {
+        free_str_ptr!(self.path);
+        free_str_ptr!(self.chain_type);
+    }
+}
+
+#[repr(C)]
+pub struct KeypalMultiAccountsRequest {
+    pub paths: PtrT<VecFFI<KeypalAccountsRequest>>,
+    pub origin: PtrString,
+}
+
+impl From<KeypalCryptoMultiAccountsRequest> for KeypalMultiAccountsRequest {
+    fn from(request: KeypalCryptoMultiAccountsRequest) -> Self {
+        KeypalMultiAccountsRequest {
+            paths: VecFFI::from(
+                request
+                    .get_paths()
+                    .iter()
+                    .map(|v| KeypalAccountsRequest::from(v.clone()))
+                    .collect::<Vec<KeypalAccountsRequest>>(),
+            )
+            .c_ptr(),
+            origin: convert_c_char(request.get_origin().unwrap_or_default()),
+        }
+    }
+}
+
+impl free::Free for KeypalMultiAccountsRequest {
+    fn free(&self) {
+        free_vec!(self.paths);
+        free_str_ptr!(self.origin);
+    }
+}
+
+impl_c_ptr!(KeypalMultiAccountsRequest);
+make_free_method!(Response<KeypalMultiAccountsRequest>);
+
+#[no_mangle]
+pub extern "C" fn parse_keypal_multi_accounts_request(
+    ptr: PtrUR,
+) -> *mut Response<KeypalMultiAccountsRequest> {
+    let request = extract_ptr_with_type!(ptr, KeypalCryptoMultiAccountsRequest);
+    let c_request: KeypalMultiAccountsRequest = request.clone().into();
+    Response::success(c_request).c_ptr()
 }

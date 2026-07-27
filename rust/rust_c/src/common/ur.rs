@@ -70,6 +70,7 @@ use ur_registry::ton::ton_sign_request::TonSignRequest;
 #[cfg(feature = "zcash")]
 use ur_registry::zcash::zcash_pczt::ZcashPczt;
 
+use ur_registry::extend::keypal_crypto_multi_accounts_request::KeypalCryptoMultiAccountsRequest;
 use ur_registry::keypal::keypal_device_verify_request::KeypalDeviceVerifyRequest;
 use ur_registry::keypal::keypal_tron_sign_request::KeypalTronSignRequest;
 
@@ -296,6 +297,7 @@ pub enum ViewType {
     MultisigBytesImportXpub,
     KeyPalDeviceVerifyView,
     KeyPalTronSignRequestView,
+    KeyPalCryptoMultiAccountsRequestView,
     ViewTypeUnKnown,
 }
 
@@ -365,6 +367,7 @@ pub enum QRCodeType {
     XmrTxUnsignedRequest,
     KeypalDeviceVerifyRequest,
     KeypalTronSignRequest,
+    KeypalCryptoMultiAccountsRequest,
     URTypeUnKnown,
 }
 
@@ -434,6 +437,9 @@ impl QRCodeType {
             #[cfg(not(feature = "btc-only"))]
             InnerURType::KeypalDeviceVerifyRequest(_) => Ok(QRCodeType::KeypalDeviceVerifyRequest),
             InnerURType::KeypalTronSignRequest(_) => Ok(QRCodeType::KeypalTronSignRequest),
+            InnerURType::KeypalCryptoMultiAccountsRequest(_) => {
+                Ok(QRCodeType::KeypalCryptoMultiAccountsRequest)
+            }
             // InnerURType::QRHardwareCall(_) => Ok(QRCodeType::QRHardwareCall),
             _ => Err(URError::NotSupportURTypeError(value.get_type_str())),
         }
@@ -608,6 +614,16 @@ fn free_ur(ur_type: &QRCodeType, data: PtrUR) {
         // todo
         QRCodeType::AvaxSignRequest => {
             free_ptr_with_type!(data, AvaxSignRequest);
+        }
+        #[cfg(feature = "multi-coins")]
+        QRCodeType::KeypalCryptoMultiAccountsRequest => {
+            free_ptr_with_type!(data, KeypalCryptoMultiAccountsRequest);
+        }
+        QRCodeType::KeypalDeviceVerifyRequest => {
+            free_ptr_with_type!(data, KeypalDeviceVerifyRequest);
+        }
+        QRCodeType::KeypalTronSignRequest => {
+            free_ptr_with_type!(data, KeypalTronSignRequest);
         }
         // #[cfg(not(feature = "btc-only"))]
         // QRCodeType::QRHardwareCall => {
@@ -792,6 +808,9 @@ pub fn decode_ur(ur: String) -> URParseResult {
             _decode_ur::<KeypalDeviceVerifyRequest>(ur, ur_type)
         }
         QRCodeType::KeypalTronSignRequest => _decode_ur::<KeypalTronSignRequest>(ur, ur_type),
+        QRCodeType::KeypalCryptoMultiAccountsRequest => {
+            _decode_ur::<KeypalCryptoMultiAccountsRequest>(ur, ur_type)
+        }
         QRCodeType::URTypeUnKnown | QRCodeType::SeedSignerMessage => URParseResult::from(
             URError::NotSupportURTypeError("UnKnown ur type".to_string()),
         ),
@@ -904,6 +923,9 @@ fn receive_ur(ur: String, decoder: &mut KeystoneURDecoder) -> URParseMultiResult
         }
         QRCodeType::KeypalTronSignRequest => {
             _receive_ur::<KeypalTronSignRequest>(ur, ur_type, decoder)
+        }
+        QRCodeType::KeypalCryptoMultiAccountsRequest => {
+            _receive_ur::<KeypalCryptoMultiAccountsRequest>(ur, ur_type, decoder)
         }
         QRCodeType::URTypeUnKnown | QRCodeType::SeedSignerMessage => URParseMultiResult::from(
             URError::NotSupportURTypeError("UnKnown ur type".to_string()),

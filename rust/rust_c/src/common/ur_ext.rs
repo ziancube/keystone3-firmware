@@ -37,6 +37,7 @@ use ur_registry::ethereum::eth_sign_request;
 #[cfg(feature = "ethereum")]
 use ur_registry::ethereum::eth_sign_request::EthSignRequest;
 use ur_registry::extend::crypto_multi_accounts::CryptoMultiAccounts;
+use ur_registry::extend::keypal_crypto_multi_accounts_request::KeypalCryptoMultiAccountsRequest;
 #[cfg(not(feature = "btc-only"))]
 use ur_registry::extend::qr_hardware_call::{CallType, QRHardwareCall};
 #[cfg(feature = "iota")]
@@ -395,6 +396,12 @@ impl InferViewType for KeypalDeviceVerifyRequest {
 impl InferViewType for KeypalTronSignRequest {
     fn infer(&self) -> Result<ViewType, URError> {
         Ok(ViewType::KeyPalTronSignRequestView)
+    }
+}
+
+impl InferViewType for KeypalCryptoMultiAccountsRequest {
+    fn infer(&self) -> Result<ViewType, URError> {
+        Ok(ViewType::KeyPalCryptoMultiAccountsRequestView)
     }
 }
 
