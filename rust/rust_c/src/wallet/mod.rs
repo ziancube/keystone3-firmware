@@ -58,12 +58,13 @@ pub extern "C" fn check_hardware_call_path(
         "BTC_TAPROOT" => "m/86'",
         "BTC" => "m/49'",
         "ETH" => "m/44'/60'",
+        "TRX" => "m/44'/195'",
         "SOL" => "m/44'/501'",
+        "DOGE" => "m/44'/3'",
         "XRP" => "m/44'/144'",
         "ADA" => "m/1852'/1815'",
         "ADA_CIP_1853" => "m/1853'/1815'",
         "ADA_CIP_1854" => "m/1854'/1815'",
-        "TRX" => "m/44'/195'",
         "LTC" => "m/49'/2'",
         "BCH" => "m/44'/145'",
         "APT" => "m/44'/637'",
@@ -104,6 +105,76 @@ pub extern "C" fn check_hardware_call_path(
         "QCK" => "m/44'/118'",
         "TGD" => "m/44'/118'",
         "THOR" => "m/44'/931'",
+        _ => return Response::success(false).c_ptr(),
+    };
+    let mut path = recover_c_char(path).to_lowercase();
+    if !path.starts_with('m') {
+        path = format!("m/{}", path);
+    }
+    let result = path.starts_with(prefix);
+    Response::success(result).c_ptr()
+}
+
+#[no_mangle]
+pub extern "C" fn check_keypal_multi_accounts_path(
+    path: PtrString,
+    chain_type: PtrString,
+) -> *mut Response<bool> {
+    let chain_type_str = recover_c_char(chain_type);
+    let prefix = match chain_type_str.as_str() {
+        "BTC_LEGACY" => "m/44'/0'",
+        "BTC_NATIVE_SEGWIT" => "m/84'",
+        "BTC_TAPROOT" => "m/86'",
+        "BTC" => "m/49'",
+        "ETH" => "m/44'/60'",
+        "TRX" => "m/44'/195'",
+        "SOL" => "m/44'/501'",
+        "SOLANA" => "m/44'/501'",
+        "DOGE" => "m/44'/3'",
+        // "XRP" => "m/44'/144'",
+        // "ADA" => "m/1852'/1815'",
+        // "ADA_CIP_1853" => "m/1853'/1815'",
+        // "ADA_CIP_1854" => "m/1854'/1815'",
+        // "LTC" => "m/49'/2'",
+        // "BCH" => "m/44'/145'",
+        // "APT" => "m/44'/637'",
+        // "SUI" => "m/44'/784'",
+        // "DASH" => "m/44'/5'",
+        // "AR" => "m/44'/472'",
+        // "XLM" => "m/44'/148'",
+        // "TIA" => "m/44'/118'",
+        // "ATOM" => "m/44'/118'",
+        // "DYM" => "m/44'/118'",
+        // "OSMO" => "m/44'/118'",
+        // "INJ" => "m/44'/60'",
+        // "CRO" => "m/44'/394'",
+        // "KAVA" => "m/44'/459'",
+        // "LUNC" => "m/44'/330'",
+        // "AXL" => "m/44'/118'",
+        // "LUNA" => "m/44'/330'",
+        // "AKT" => "m/44'/118'",
+        // "STRD" => "m/44'/118'",
+        // "SCRT" => "m/44'/529'",
+        // "BLD" => "m/44'/564'",
+        // "CTK" => "m/44'/118'",
+        // "EVMOS" => "m/44'/60'",
+        // "STARS" => "m/44'/118'",
+        // "XPRT" => "m/44'/118'",
+        // "SOMM" => "m/44'/118'",
+        // "JUNO" => "m/44'/118'",
+        // "IRIS" => "m/44'/118'",
+        // "DVPN" => "m/44'/118'",
+        // "ROWAN" => "m/44'/118'",
+        // "REGEN" => "m/44'/118'",
+        // "BOOT" => "m/44'/118'",
+        // "GRAV" => "m/44'/118'",
+        // "IXO" => "m/44'/118'",
+        // "NGM" => "m/44'/118'",
+        // "IOV" => "m/44'/234'",
+        // "UMEE" => "m/44'/118'",
+        // "QCK" => "m/44'/118'",
+        // "TGD" => "m/44'/118'",
+        // "THOR" => "m/44'/931'",
         _ => return Response::success(false).c_ptr(),
     };
     let mut path = recover_c_char(path).to_lowercase();
