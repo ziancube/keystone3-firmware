@@ -50,8 +50,6 @@ pub extern "C" fn eth_abiex_parse(
             return -1;
         }
     };
-    let s = serde_json::to_string(&calls).unwrap();
-    log_message(&s);
     let boxed = Box::new(calls);
     unsafe {
         *parsed = Box::into_raw(boxed) as PtrEthabiexParsed;
