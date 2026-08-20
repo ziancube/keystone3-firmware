@@ -362,9 +362,8 @@ impl ContractCallable for Permit2Approval {
             _ => return Err(EthereumError::InvalidContractABI),
         };
 
-        let token = format!("0x{:x}", token);
         let spender = format!("0x{:x}", spender);
-        let token_info = get_token_info(chain_id, address);
+        let token_info = get_token_info(chain_id, &token.to_fixed_bytes());
         let amount = amount_format(&token_info, amount.into());
         let expiration = expiration.to_string();
         Ok(vec![ContractCall::Approval(Erc20Approval {
