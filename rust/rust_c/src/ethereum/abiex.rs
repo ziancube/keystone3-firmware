@@ -83,24 +83,21 @@ pub extern "C" fn eth_abiex_parsed_get(parsed: PtrEthabiexParsed, index: u32) ->
     };
 
     match call {
-        ContractCall::Transfer(ref transfer) if index == 0 => {
+        ContractCall::Transfer(ref transfer) => {
             let display = transfer.clone().into();
             Response::success(display).c_ptr()
-        },
-        ContractCall::Approval(ref approval) if index == 0 => {
+        }
+        ContractCall::Approval(ref approval) => {
             let display = approval.clone().into();
             Response::success(display).c_ptr()
-        },
-        ContractCall::TransferFrom(ref transfer_from) if index == 0 => {
+        }
+        ContractCall::TransferFrom(ref transfer_from) => {
             let display = transfer_from.clone().into();
             Response::success(display).c_ptr()
-        },
+        }
         ContractCall::Unknown(ref data) => {
             let display = DisplayETHAbiexParsed::unknown(data);
             Response::success(display).c_ptr()
-        },
-        _  => {
-            Response::from(RustCError::InvalidData("Invalid index".to_string())).c_ptr()
-        },
+        }
     }
 }
