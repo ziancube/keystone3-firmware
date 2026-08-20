@@ -29,7 +29,9 @@ pub enum ETHAbiexParsedType {
     #[allow(non_camel_case_types)]
     ETHABIEX_PARSED_TYPE_BATCH = 3,
     #[allow(non_camel_case_types)]
-    ETHABIEX_PARSED_TYPE_UNKNOWN = 4,
+    ETHABIEX_PARSED_TYPE_UNAPPROVAL = 4,
+    #[allow(non_camel_case_types)]
+    ETHABIEX_PARSED_TYPE_UNKNOWN = 5,
 }
 
 #[no_mangle]
@@ -89,6 +91,11 @@ pub extern "C" fn eth_abiex_parsed_get(parsed: PtrEthabiexParsed, index: u32) ->
         }
         ContractCall::Approval(ref approval) => {
             let display = approval.clone().into();
+            Response::success(display).c_ptr()
+        }
+        ContractCall::UnApproval(ref unapproval) => {
+            let mut display: DisplayETHAbiexParsed = unapproval.clone().into();
+            display.eth_abiex_parsed_type = ETHAbiexParsedType::ETHABIEX_PARSED_TYPE_UNAPPROVAL;
             Response::success(display).c_ptr()
         }
         ContractCall::TransferFrom(ref transfer_from) => {

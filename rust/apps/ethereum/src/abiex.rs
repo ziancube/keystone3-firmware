@@ -262,16 +262,20 @@ impl ContractCallable for Erc20Approval {
         };
 
         let spender = format!("0x{:x}", spender);
+
         let token_info = get_token_info(chain_id, address);
         let mut unlimited_value: U256 = 100000000000u128.into();
         unlimited_value *= U256::from(10u128.pow(token_info.decimals));
-        let amount = if amount >= &unlimited_value {
+        let str_amount = if amount >= &unlimited_value {
             "unlimited".to_string()
         } else {
             amount_format(&token_info, amount.into())
         };
-
-        Ok(vec![ContractCall::Approval(Erc20Approval { spender, amount })])
+        if amount.is_zero() {
+                Ok(vec![ContractCall::UnApproval(Erc20Approval { spender, amount: str_amount })])
+        } else {
+                Ok(vec![ContractCall::Approval(Erc20Approval { spender, amount: str_amount })])
+        }
     }
 }
 
@@ -364,12 +368,16 @@ impl ContractCallable for Permit2Approval {
 
         let spender = format!("0x{:x}", spender);
         let token_info = get_token_info(chain_id, &token.to_fixed_bytes());
-        let amount = amount_format(&token_info, amount.into());
+        let str_amount = amount_format(&token_info, amount.into());
         let expiration = expiration.to_string();
-        Ok(vec![ContractCall::Approval(Erc20Approval {
-            spender,
-            amount,
-        })])
+        if amount.is_zero() {
+            Ok(vec![ContractCall::UnApproval(Erc20Approval { spender, amount: str_amount })])
+        } else {
+            Ok(vec![ContractCall::Approval(Erc20Approval {
+                spender,
+                amount: str_amount,
+            })])
+        }
     }
 }
 
@@ -776,6 +784,8 @@ pub enum ContractCall {
     Transfer(Erc20Transfer),
     /// ERC20: Approval
     Approval(Erc20Approval),
+    /// UnApproval
+    UnApproval(Erc20Approval),
     /// ERC721: TransferFrom
     TransferFrom(Erc721TransferFrom),
     /// Unknown
