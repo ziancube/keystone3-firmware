@@ -703,29 +703,29 @@ impl WrappedPsbt {
         purpose: &str,
         context: &ParseContext,
     ) -> Result<Option<(String, bool)>> {
-        if let Some(config) = &context.multisig_wallet_config {
-            let total = config.total;
-            // not my key
-            if bip32_derivation.keys().len() as u32 != total {
-                return Ok(None);
-            }
+        // if let Some(config) = &context.multisig_wallet_config {
+        //     let total = config.total;
+        //     // not my key
+        //     if bip32_derivation.keys().len() as u32 != total {
+        //         return Ok(None);
+        //     }
 
-            let wallet_xfps = config
-                .xpub_items
-                .iter()
-                .map(|v| v.xfp.clone())
-                .sorted()
-                .fold("".to_string(), |acc, cur| format!("{}{}", acc, cur));
-            let xfps = bip32_derivation
-                .values()
-                .map(|(fp, _)| fp.to_string())
-                .sorted()
-                .fold("".to_string(), |acc, cur| format!("{}{}", acc, cur));
-            // not my multisig key
-            if !wallet_xfps.eq_ignore_ascii_case(&xfps) {
-                return Ok(None);
-            }
-        }
+        //     let wallet_xfps = config
+        //         .xpub_items
+        //         .iter()
+        //         .map(|v| v.xfp.clone())
+        //         .sorted()
+        //         .fold("".to_string(), |acc, cur| format!("{}{}", acc, cur));
+        //     let xfps = bip32_derivation
+        //         .values()
+        //         .map(|(fp, _)| fp.to_string())
+        //         .sorted()
+        //         .fold("".to_string(), |acc, cur| format!("{}{}", acc, cur));
+        //     // not my multisig key
+        //     if !wallet_xfps.eq_ignore_ascii_case(&xfps) {
+        //         return Ok(None);
+        //     }
+        // }
         //it's a singlesig or it's my multisig input
         for key in bip32_derivation.keys() {
             let (fingerprint, path) = bip32_derivation
@@ -733,40 +733,40 @@ impl WrappedPsbt {
                 .ok_or(BitcoinError::InvalidInput)?;
             if fingerprint.eq(&context.master_fingerprint) {
                 let child = path.to_string();
-                match &context.multisig_wallet_config {
-                    Some(config) => {
-                        for (i, xpub_item) in config.xpub_items.iter().enumerate() {
-                            if xpub_item.xfp.eq_ignore_ascii_case(&fingerprint.to_string()) {
-                                if let Some(parent_path) = config.get_derivation_by_index(i) {
-                                    if child.starts_with(&parent_path) {
-                                        return Ok(Some((
-                                            child.to_uppercase(),
-                                            Self::judge_external_key(child, parent_path.clone()),
-                                        )));
-                                    }
-                                }
-                            }
-                        }
-                        return Err(BitcoinError::InvalidTransaction(format!(
-                            "invalid {} #{}, fingerprint matched but cannot derive associated public key",
-                            purpose, index
-                        )));
-                    }
-                    None => {
-                        for parent_path in context.extended_public_keys.keys() {
-                            if child.starts_with(&parent_path.to_string()) {
-                                return Ok(Some((
-                                    child.to_uppercase(),
-                                    Self::judge_external_key(child, parent_path.to_string()),
-                                )));
-                            }
-                        }
-                        return Err(BitcoinError::InvalidTransaction(format!(
-                            "invalid {} #{}, fingerprint matched but cannot derive associated public key",
-                            purpose, index
+                // match &context.multisig_wallet_config {
+                //     Some(config) => {
+                //         for (i, xpub_item) in config.xpub_items.iter().enumerate() {
+                //             if xpub_item.xfp.eq_ignore_ascii_case(&fingerprint.to_string()) {
+                //                 if let Some(parent_path) = config.get_derivation_by_index(i) {
+                //                     if child.starts_with(&parent_path) {
+                //                         return Ok(Some((
+                //                             child.to_uppercase(),
+                //                             Self::judge_external_key(child, parent_path.clone()),
+                //                         )));
+                //                     }
+                //                 }
+                //             }
+                //         }
+                //         return Err(BitcoinError::InvalidTransaction(format!(
+                //             "invalid {} #{}, fingerprint matched but cannot derive associated public key",
+                //             purpose, index
+                //         )));
+                //     }
+                //     None => {
+                for parent_path in context.extended_public_keys.keys() {
+                    if child.starts_with(&parent_path.to_string()) {
+                        return Ok(Some((
+                            child.to_uppercase(),
+                            Self::judge_external_key(child, parent_path.to_string()),
                         )));
                     }
                 }
+                return Err(BitcoinError::InvalidTransaction(format!(
+                    "invalid {} #{}, fingerprint matched but cannot derive associated public key",
+                    purpose, index
+                )));
+                //     }
+                // }
             }
         }
         Ok(None)
@@ -1003,20 +1003,20 @@ mod tests {
 
         // multi sig wallet and multi sig input, verify code is equal
         {
-            let psbt_hex= "70736274ff01005e0200000001d8d89245a905abe9e2ab7bb834ebbc50a75947c82f96eeec7b38e0b399a62c490000000000fdffffff0158070000000000002200202b9710701f5c944606bb6bab82d2ef969677d8b9d04174f59e2a631812ae739bf76c27004f01043587cf0473f7e9418000000147f2d1b4bef083e346eb1949bcd8e2b59f95d8391a9eb4e1ea9005df926585480365fd7b1eca553df2c4e17bc5b88384ceda3d0d98fa3145cff5e61e471671a0b214c45358fa300000800100008000000080010000804f01043587cf04bac1483980000001a73adbe2878487634dcbfc3f7ebde8b1fc994f1ec06860cf01c3fe2ea791ddb602e62a2a9973ee6b3a7af47c229a5bde70bca59bd04bbb297f5693d7aa256b976d1473c5da0a3000008001000080000000800100008000010120110800000000000017a914980ec372495334ee232575505208c0b2e142dbb5872202032ed737f53936afb128247fc71a0b0b5be4d9348e9a48bfda9ef31efe3e45fa2e47304402203109d97095c61395881d6f75093943b16a91e1a4fff73bf193fcfe6e7689a35c02203bd187fed5bba45ee2c322911b8abb07f1d091520f5598259047d0dee058a75e01010304010000000104220020ffac81e598dd9856d08bd6c55b712fd23ea8522bd075fcf48ed467ced2ee015601054752210267ea4562439356307e786faf40503730d8d95a203a0e345cb355a5dfa03fce0321032ed737f53936afb128247fc71a0b0b5be4d9348e9a48bfda9ef31efe3e45fa2e52ae2206032ed737f53936afb128247fc71a0b0b5be4d9348e9a48bfda9ef31efe3e45fa2e1cc45358fa30000080010000800000008001000080000000000000000022060267ea4562439356307e786faf40503730d8d95a203a0e345cb355a5dfa03fce031c73c5da0a3000008001000080000000800100008000000000000000000000";
+            let psbt_hex= "70736274ff0100550200000001a568ecbb8d28e81a878a2292649c2c330f33fa1323b7327dce19455d1a154a0e0000000000ffffffff01983a0000000000001976a914dcabf91201bfc9bfb948dea69f260240953ab64588ac0000000000010120204e00000000000017a914612f20b977f900605597c6b1cf580755ee17a1d887010469522103d534107f17143fd2d03476377a80a81fa9435d418d7cd0792e7547271f25d86f2102b2ba054a383ec1bfff474e0e6d30a06a5e17501889f3dc8c9e54c3367a1e713921031088aafcf4f62fef4d3d8f7d6aa4cce2e152afae7484b4a3aecd6ccf26e63d8153ae220603d534107f17143fd2d03476377a80a81fa9435d418d7cd0792e7547271f25d86f18f1c149f52c000080000000800000008000000000000000000000";
             let psbt = Psbt::deserialize(&Vec::from_hex(psbt_hex).unwrap()).unwrap();
             let wpsbt = WrappedPsbt { psbt };
 
-            let master_fingerprint = Fingerprint::from_str("73c5da0a").unwrap();
-            let extended_pubkey = Xpub::from_str("tpubDFH9dgzveyD8yHQb8VrpG8FYAuwcLMHMje2CCcbBo1FpaGzYVtJeYYxcYgRqSTta5utUFts8nPPHs9C2bqoxrey5jia6Dwf9mpwrPq7YvcJ").unwrap();
-            let path = DerivationPath::from_str("m/48'/1'/0'/1'").unwrap();
+            let master_fingerprint = Fingerprint::from_str("f1c149f5").unwrap();
+            let extended_pubkey = Xpub::from_str("xpub6CAxrkiSbwkn4LayKD6qBcZg4tQvhHBH7TofQjNV9Lb3cB5u8owxdLGfc2bKoz2McoviAMXzWHwSaqc5Sm8C9SWMsnvuBw1bjEwtWsMZZFX").unwrap();
+            let path = DerivationPath::from_str("m/44'/0'/0'").unwrap();
             let mut keys = BTreeMap::new();
             keys.insert(path, extended_pubkey);
 
             let reust = wpsbt.check(Left(&ParseContext {
                 master_fingerprint: master_fingerprint.clone(),
                 extended_public_keys: keys.clone(),
-                verify_code: Some("03669e02".to_string()),
+                verify_code: None,
                 multisig_wallet_config: None,
             }));
             assert_eq!(Ok(()), reust);

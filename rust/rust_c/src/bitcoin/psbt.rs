@@ -552,14 +552,14 @@ fn parse_psbt(
                     }
                 }
             }
-            let wallet_config = match multisig_wallet_config
-                .map(|v| parse_wallet_config(&v, &fp.to_string()))
-                .transpose()
-            {
-                Ok(t) => t,
-                Err(e) => return TransactionParseResult::from(e).c_ptr(),
-            };
-            let context = ParseContext::new(fp, keys, None, wallet_config);
+            // let wallet_config = match multisig_wallet_config
+            //     .map(|v| parse_wallet_config(&v, &fp.to_string()))
+            //     .transpose()
+            // {
+            //     Ok(t) => t,
+            //     Err(e) => return TransactionParseResult::from(e).c_ptr(),
+            // };
+            let context = ParseContext::new(fp, keys, None, None);
             let parsed_psbt = app_bitcoin::parse_psbt(psbt, context);
             match parsed_psbt {
                 Ok(res) => {
@@ -601,14 +601,14 @@ fn check_psbt(
                     }
                 }
             }
-            let wallet_config = match multisig_wallet_config
-                .map(|v| parse_wallet_config(&v, &fp.to_string()))
-                .transpose()
-            {
-                Ok(t) => t,
-                Err(e) => return TransactionCheckResult::from(e).c_ptr(),
-            };
-            let context = ParseContext::new(fp, keys, verify_code, wallet_config);
+            // let wallet_config = match multisig_wallet_config
+            //     .map(|v| parse_wallet_config(&v, &fp.to_string()))
+            //     .transpose()
+            // {
+            //     Ok(t) => t,
+            //     Err(e) => return TransactionCheckResult::from(e).c_ptr(),
+            // };
+            let context = ParseContext::new(fp, keys, verify_code, None);
             let check_result = app_bitcoin::check_psbt(psbt, context);
             match check_result {
                 Ok(_) => TransactionCheckResult::new().c_ptr(),
