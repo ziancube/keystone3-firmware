@@ -1,4 +1,5 @@
 use crate::bindings;
+use crate::errors::{EthereumError, Result};
 use alloc::boxed::Box;
 use alloc::ffi::CString;
 use alloc::format;
@@ -6,7 +7,6 @@ use alloc::string::ToString;
 use alloc::vec;
 use alloc::{string::String, vec::Vec};
 use ethabi::ethereum_types::U256;
-use crate::errors::{EthereumError, Result};
 
 struct TokenInfo {
     symbol: String,
@@ -79,44 +79,30 @@ pub fn contract_call_parse(
     data: &[u8],
 ) -> Result<Vec<ContractCall>> {
     if data.len() < 4 {
-        return Err(EthereumError::InvalidContractABI);
+        return Ok(vec![ContractCall::Unknown(data.to_vec())]);
     }
 
-    let selector = &data[..4].try_into().map_err(|_| EthereumError::InvalidContractABI)?;
+    let selector = &data[..4]
+        .try_into()
+        .map_err(|_| EthereumError::InvalidContractABI)?;
     let params = &data[4..];
 
     let calls = match selector {
-        Erc20Transfer::SELECTOR => {
-            Erc20Transfer::parse(chain_id, address, params)?
-        }
-        Erc20Approval::SELECTOR => {
-            Erc20Approval::parse(chain_id, address, params)?
-        }
-        Permit2Approval::SELECTOR => {
-            Permit2Approval::parse(chain_id, address, params)?
-        }
-        Erc721TransferFrom::SELECTOR => {
-            Erc721TransferFrom::parse(chain_id, address, params)?
-        }
+        Erc20Transfer::SELECTOR => Erc20Transfer::parse(chain_id, address, params)?,
+        Erc20Approval::SELECTOR => Erc20Approval::parse(chain_id, address, params)?,
+        Permit2Approval::SELECTOR => Permit2Approval::parse(chain_id, address, params)?,
+        Erc721TransferFrom::SELECTOR => Erc721TransferFrom::parse(chain_id, address, params)?,
         // safeTransferFrom(address from,address to,uint256 tokenId)
         // 0x42842e0e
-        &[0x42, 0x84, 0x2e, 0x0e] => {
-            Erc721TransferFrom::parse(chain_id, address, params)?
-        }
+        &[0x42, 0x84, 0x2e, 0x0e] => Erc721TransferFrom::parse(chain_id, address, params)?,
         Erc721SafeTransferFrom::SELECTOR => {
             Erc721SafeTransferFrom::parse(chain_id, address, params)?
         }
-        ExecuteBatch::SELECTOR => {
-            ExecuteBatch::parse(chain_id, address, params)?
-        }
+        ExecuteBatch::SELECTOR => ExecuteBatch::parse(chain_id, address, params)?,
         // executeBatchAndSkipFailures(Call[] calls)
         // 0x27bea2c6
-        &[0x27, 0xbe, 0xa2, 0xc6] => {
-            ExecuteBatch::parse(chain_id, address, params)?
-        }
-        HandleOps::SELECTOR => {
-            HandleOps::parse(chain_id, address, params)?
-        }
+        &[0x27, 0xbe, 0xa2, 0xc6] => ExecuteBatch::parse(chain_id, address, params)?,
+        HandleOps::SELECTOR => HandleOps::parse(chain_id, address, params)?,
         _ => vec![ContractCall::Unknown(data.to_vec())],
     };
     Ok(calls)
@@ -272,9 +258,15 @@ impl ContractCallable for Erc20Approval {
             amount_format(&token_info, amount.into())
         };
         if amount.is_zero() {
-                Ok(vec![ContractCall::UnApproval(Erc20Approval { spender, amount: str_amount })])
+            Ok(vec![ContractCall::UnApproval(Erc20Approval {
+                spender,
+                amount: str_amount,
+            })])
         } else {
-                Ok(vec![ContractCall::Approval(Erc20Approval { spender, amount: str_amount })])
+            Ok(vec![ContractCall::Approval(Erc20Approval {
+                spender,
+                amount: str_amount,
+            })])
         }
     }
 }
@@ -371,7 +363,10 @@ impl ContractCallable for Permit2Approval {
         let str_amount = amount_format(&token_info, amount.into());
         let expiration = expiration.to_string();
         if amount.is_zero() {
-            Ok(vec![ContractCall::UnApproval(Erc20Approval { spender, amount: str_amount })])
+            Ok(vec![ContractCall::UnApproval(Erc20Approval {
+                spender,
+                amount: str_amount,
+            })])
         } else {
             Ok(vec![ContractCall::Approval(Erc20Approval {
                 spender,
@@ -453,7 +448,11 @@ impl ContractCallable for Erc721TransferFrom {
         let to = format!("0x{:x}", to);
         let token_id = token_id.to_string();
 
-        Ok(vec![ContractCall::TransferFrom(Erc721TransferFrom { from, to, token_id })])
+        Ok(vec![ContractCall::TransferFrom(Erc721TransferFrom {
+            from,
+            to,
+            token_id,
+        })])
     }
 }
 
@@ -540,10 +539,13 @@ impl ContractCallable for Erc721SafeTransferFrom {
         let from = format!("0x{:x}", from);
         let to = format!("0x{:x}", to);
         let token_id = token_id.to_string();
-        Ok(vec![ContractCall::TransferFrom(Erc721TransferFrom { from, to, token_id })])
+        Ok(vec![ContractCall::TransferFrom(Erc721TransferFrom {
+            from,
+            to,
+            token_id,
+        })])
     }
 }
-
 
 pub struct ExecuteBatch;
 
@@ -644,7 +646,8 @@ impl ContractCallable for ExecuteBatch {
 
         let mut batch_calls = vec![];
         for call in calls.iter() {
-            batch_calls.extend_from_slice(&ExecuteBatch::parse_batch_call(chain_id, address, call)?);
+            batch_calls
+                .extend_from_slice(&ExecuteBatch::parse_batch_call(chain_id, address, call)?);
         }
         Ok(batch_calls)
     }
@@ -710,8 +713,7 @@ impl ContractCallable for HandleOps {
         chain_id: u64,
         address: &[u8; 20],
         tokens: &[ethabi::Token],
-    ) -> Result<Vec<ContractCall>>
-    {
+    ) -> Result<Vec<ContractCall>> {
         let ops = tokens.get(0).ok_or(EthereumError::InvalidContractABI)?;
         let beneficiary = tokens.get(1).ok_or(EthereumError::InvalidContractABI)?;
         let ops = if let ethabi::Token::Array(ops) = ops {
