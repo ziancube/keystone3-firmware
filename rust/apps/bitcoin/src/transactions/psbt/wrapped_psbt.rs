@@ -120,7 +120,7 @@ impl WrappedPsbt {
         }
         let path = self.get_my_input_path(input, index, context)?;
         let sign_status = self.get_input_sign_status(input);
-        let is_multisig = sign_status.1 > 1;
+        let is_multisig = self.get_multi_sig_input_info(input).is_some() || sign_status.1 > 1;
         let mut need_sign = false;
         if path.is_some() {
             need_sign = self.need_sign_input(input, context)?;
@@ -240,24 +240,21 @@ impl WrappedPsbt {
         index: usize,
         context: &ParseContext,
     ) -> Result<()> {
+        // A multisig input is expected to carry cosigner signatures, so those
+        // must not be rejected. But if one of the signatures is ours, this
+        // PSBT has already been signed by this device and must be rejected at
+        // check time instead of being signed again.
+        if self.get_multi_sig_input_info(input).is_some() {
+            if Self::input_has_my_signature(input, context) {
+                return Err(BitcoinError::InvalidTransaction(format!(
+                    "input #{} has already been signed",
+                    index
+                )));
+            }
+            return Ok(());
+        }
         if input.bip32_derivation.len() > 1 {
-            // we consider this situation to be OK currently.
-
-            // for key in input.bip32_derivation.keys() {
-            //     let (fingerprint, _) = input
-            //         .bip32_derivation
-            //         .get(key)
-            //         .ok_or(BitcoinError::InvalidInput)?;
-
-            //     if fingerprint.eq(&context.master_fingerprint) {
-            //         if input.partial_sigs.contains_key(&PublicKey::new(*key)) {
-            //             return Err(BitcoinError::InvalidTransaction(format!(
-            //                 "input #{} has already been signed",
-            //                 index
-            //             )));
-            //         }
-            //     }
-            // }
+            // No multisig script is available; keep the previous behaviour.
             return Ok(());
         }
         if self.is_taproot_input(input) {
@@ -358,6 +355,68 @@ impl WrappedPsbt {
         }
     }
 
+    /// Parses a standard m-of-n multisig script and returns the threshold plus
+    /// the cosigner public keys committed in it.
+    ///
+    /// This works for any m/n the script opcodes support. The redeem/witness
+    /// script is the only place that always carries the complete cosigner set:
+    /// an already signed PSBT may contain only the local signer's derivation,
+    /// or none at all, so `bip32_derivation` cannot be used for this.
+    fn parse_multi_sig_script(script: &ScriptBuf) -> Option<(u8, Vec<secp256k1::PublicKey>)> {
+        if !script.is_multisig() {
+            return None;
+        }
+        let mut required_sigs = None;
+        let mut pubkeys = Vec::new();
+        for instruction in script.instructions() {
+            match instruction.ok()? {
+                Instruction::Op(op) => {
+                    // OP_PUSHNUM_1 (0x51) .. OP_PUSHNUM_16 (0x60)
+                    if required_sigs.is_none() && op.to_u8() >= 0x51 && op.to_u8() <= 0x60 {
+                        required_sigs = Some(op.to_u8() - 0x50);
+                    }
+                }
+                Instruction::PushBytes(bytes) => {
+                    if let Ok(pubkey) = secp256k1::PublicKey::from_slice(bytes.as_bytes()) {
+                        pubkeys.push(pubkey);
+                    }
+                }
+            }
+        }
+        let required_sigs = required_sigs?;
+        if required_sigs == 0 || required_sigs as usize > pubkeys.len() {
+            return None;
+        }
+        Some((required_sigs, pubkeys))
+    }
+
+    fn get_multi_sig_input_info(&self, input: &Input) -> Option<(u8, Vec<secp256k1::PublicKey>)> {
+        match self.get_multi_sig_script_and_format(input) {
+            Ok((script, _)) => Self::parse_multi_sig_script(script),
+            Err(_) => None,
+        }
+    }
+
+    fn input_is_signed(input: &Input) -> bool {
+        !input.partial_sigs.is_empty()
+            || input.tap_key_sig.is_some()
+            || !input.tap_script_sigs.is_empty()
+            || input.final_script_sig.is_some()
+            || input.final_script_witness.is_some()
+    }
+
+    /// Returns true if one of our keys already produced a signature for this
+    /// input.
+    fn input_has_my_signature(input: &Input, context: &ParseContext) -> bool {
+        input
+            .bip32_derivation
+            .iter()
+            .any(|(key, (fingerprint, _))| {
+                fingerprint.eq(&context.master_fingerprint)
+                    && input.partial_sigs.contains_key(&PublicKey::new(*key))
+            })
+    }
+
     // fn get_input_sign_status_text(&self, input: &Input) -> String {
     //     //this might be a multisig input;
     //     if input.bip32_derivation.len() > 1 {
@@ -384,21 +443,24 @@ impl WrappedPsbt {
 
     //return: (sigs, required_sigs)
     fn get_input_sign_status(&self, input: &Input) -> (u32, u32) {
-        //this might be a multisig input;
-        if input.bip32_derivation.len() > 1 {
-            let result = self.get_multi_sig_script_and_format(input);
-            if let Ok((script, _)) = result {
-                if script.is_multisig() {
-                    let mut instructions = script.instructions();
-                    if let Some(Ok(Instruction::Op(op))) = instructions.next() {
-                        //OP_PUSHNUM_1 to OP_PUSHNUM_16
-                        if op.to_u8() >= 0x51 && op.to_u8() <= 0x60 {
-                            let required_sigs = op.to_u8() - 0x50;
-                            return (input.partial_sigs.len() as u32, required_sigs as u32);
-                        }
-                    }
-                }
-            }
+        // Recognize multisig from the redeem/witness script. External
+        // coordinators often include only the local signer's derivation (or
+        // strip derivations after signing), so bip32_derivation.len() cannot
+        // tell 1-of-N from N-of-N.
+        if let Some((required_sigs, _)) = self.get_multi_sig_input_info(input) {
+            let is_finalized =
+                input.final_script_sig.is_some() || input.final_script_witness.is_some();
+            let signed_sigs = if is_finalized {
+                required_sigs as u32
+            } else {
+                input.partial_sigs.len() as u32
+            };
+            return (signed_sigs, required_sigs as u32);
+        }
+        // A signed single-sig/taproot input (including finalized ones) is
+        // complete even if its derivation path is gone.
+        if Self::input_is_signed(input) {
+            return (1, 1);
         }
         //there might be a (x, 0) forms of sign status which we don't care;
         (
@@ -409,12 +471,14 @@ impl WrappedPsbt {
 
     // assume this is my input because we checked it before;
     fn need_sign_input(&self, input: &Input, context: &ParseContext) -> Result<bool> {
-        if input.bip32_derivation.len() > 1 {
+        let multi_sig_info = self.get_multi_sig_input_info(input);
+        if multi_sig_info.is_some() || input.bip32_derivation.len() > 1 {
             let (cur, req) = self.get_input_sign_status(input);
             //already collected needed signatures
             if cur >= req {
                 return Ok(false);
             }
+            let multi_sig_pubkeys = multi_sig_info.map(|(_, pubkeys)| pubkeys);
             // or I have signed this input
             for key in input.bip32_derivation.keys() {
                 let (fingerprint, _) = input
@@ -423,14 +487,23 @@ impl WrappedPsbt {
                     .ok_or(BitcoinError::InvalidInput)?;
 
                 if fingerprint.eq(&context.master_fingerprint) {
-                    if input.partial_sigs.contains_key(&PublicKey::new(*key)) {
+                    // When a multisig script is present, only a key committed
+                    // in that script can be our signing key.
+                    let in_multi_sig_script = match &multi_sig_pubkeys {
+                        Some(pubkeys) => pubkeys.iter().any(|pubkey| pubkey.eq(key)),
+                        None => true,
+                    };
+                    if in_multi_sig_script && input.partial_sigs.contains_key(&PublicKey::new(*key))
+                    {
                         return Ok(false);
                     }
                 }
             }
             Ok(true)
         } else {
-            Ok(input.partial_sigs.len() < 1)
+            // Covers finalized and taproot inputs too, not only ECDSA
+            // partial_sigs.
+            Ok(!Self::input_is_signed(input))
         }
     }
 
@@ -573,6 +646,20 @@ impl WrappedPsbt {
         input: &Input,
         network: &network::Network,
     ) -> Result<Option<String>> {
+        // The redeem/witness script contains every cosigner pubkey and the
+        // m-of-n threshold, so build the address from it whenever it is a
+        // multisig script. A signed PSBT may carry only the local signer's
+        // derivation, so bip32_derivation.len() must not decide this.
+        if let Ok((script, format)) = self.get_multi_sig_script_and_format(input) {
+            if script.is_multisig() {
+                return Ok(Some(calculate_multi_address(
+                    script,
+                    format,
+                    &crate::multi_sig::Network::try_from(network)?,
+                )?));
+            }
+        }
+
         if input.bip32_derivation.len() > 1 {
             let (script, foramt) = self.get_multi_sig_script_and_format(input)?;
             return Ok(Some(calculate_multi_address(
@@ -679,7 +766,21 @@ impl WrappedPsbt {
         if self.is_taproot_input(input) {
             self.get_my_key_path_for_taproot(&input.tap_key_origins, index, "input", context)
         } else {
-            self.get_my_key_path(&input.bip32_derivation, index, "input", context)
+            // The redeem/witness script carries the complete cosigner set, so
+            // it is used to validate that our key belongs to this input even
+            // when the caller did not pass our account xpub.
+            let multi_sig_info = self.get_multi_sig_input_info(input);
+            let multi_sig_pubkeys = multi_sig_info
+                .as_ref()
+                .map(|(_, pubkeys)| pubkeys.as_slice());
+            self.get_my_key_path(
+                &input.bip32_derivation,
+                index,
+                "input",
+                context,
+                Self::input_is_signed(input),
+                multi_sig_pubkeys,
+            )
         }
     }
 
@@ -689,7 +790,14 @@ impl WrappedPsbt {
         index: usize,
         context: &ParseContext,
     ) -> Result<Option<(String, bool)>> {
-        let path = self.get_my_key_path(&output.bip32_derivation, index, "output", context)?;
+        let path = self.get_my_key_path(
+            &output.bip32_derivation,
+            index,
+            "output",
+            context,
+            false,
+            None,
+        )?;
         if path.is_some() {
             return Ok(path);
         }
@@ -702,6 +810,8 @@ impl WrappedPsbt {
         index: usize,
         purpose: &str,
         context: &ParseContext,
+        signed_input: bool,
+        multi_sig_pubkeys: Option<&[secp256k1::PublicKey]>,
     ) -> Result<Option<(String, bool)>> {
         // if let Some(config) = &context.multisig_wallet_config {
         //     let total = config.total;
@@ -732,6 +842,18 @@ impl WrappedPsbt {
                 .get(key)
                 .ok_or(BitcoinError::InvalidInput)?;
             if fingerprint.eq(&context.master_fingerprint) {
+                // For a multisig input, our key must be one of the pubkeys
+                // committed in the redeem/witness script. This check does not
+                // depend on the caller-provided account xpub, so it still
+                // works for an already signed PSBT.
+                if let Some(pubkeys) = multi_sig_pubkeys {
+                    if !pubkeys.iter().any(|pubkey| pubkey.eq(key)) {
+                        return Err(BitcoinError::InvalidTransaction(format!(
+                            "invalid {} #{}, public key is not in the multisig script",
+                            purpose, index
+                        )));
+                    }
+                }
                 let child = path.to_string();
                 // match &context.multisig_wallet_config {
                 //     Some(config) => {
@@ -761,6 +883,15 @@ impl WrappedPsbt {
                         )));
                     }
                 }
+                if signed_input && multi_sig_pubkeys.is_some() {
+                    // The input is already signed and our pubkey belongs to
+                    // the redeem/witness script, so the embedded derivation
+                    // path is trusted without requiring our account xpub.
+                    return Ok(Some((
+                        child.to_uppercase(),
+                        Self::judge_external_key_from_path(path),
+                    )));
+                }
                 return Err(BitcoinError::InvalidTransaction(format!(
                     "invalid {} #{}, fingerprint matched but cannot derive associated public key",
                     purpose, index
@@ -782,6 +913,15 @@ impl WrappedPsbt {
             }
         }
         judge(&mut sub_path.chars())
+    }
+
+    /// Judges receive/change from the derivation path itself, for cases where
+    /// the account xpub is not available.
+    fn judge_external_key_from_path(path: &DerivationPath) -> bool {
+        if path.len() < 2 {
+            return false;
+        }
+        matches!(path.index(path.len() - 2), ChildNumber::Normal { index: 0 })
     }
 
     pub fn get_my_key_path_for_taproot(
@@ -877,7 +1017,7 @@ mod tests {
     use alloc::vec::Vec;
     use core::str::FromStr;
 
-    use crate::TxChecker;
+    use crate::{TxChecker, TxParser};
     use either::Left;
     use hex::{self, FromHex, ToHex};
 
@@ -895,6 +1035,197 @@ mod tests {
             let psbt_result = result.serialize().encode_hex::<String>();
             assert_eq!("70736274ff01005202000000016d41e6873468f85aff76d7709a93b47180ea0784edaac748228d2c474396ca550000000000fdffffff01a00f0000000000001600146623828c1f87be7841a9b1cc360d38ae0a8b6ed0000000000001011f6817000000000000160014d0c4a3ef09e997b6e99e397e518fe3e41a118ca1220202e7ab2537b5d49e970309aae06e9e49f36ce1c9febbd44ec8e0d1cca0b4f9c319483045022100e2b9a7963bed429203bbd73e5ea000bfe58e3fc46ef8c1939e8cf8d1cf8460810220587ba791fc2a42445db70e2b3373493a19e6d5c47a2af0447d811ff479721b0001220602e7ab2537b5d49e970309aae06e9e49f36ce1c9febbd44ec8e0d1cca0b4f9c3191873c5da0a54000080010000800000008000000000000000000000", psbt_result);
         }
+    }
+
+    #[test]
+    fn test_signed_multisig_uses_redeem_script_pubkeys() {
+        // A signed multisig PSBT may contain only the local signer's
+        // derivation, so bip32_derivation.len() cannot be used to detect
+        // multisig. Address, threshold and cosigner keys must come from the
+        // redeem/witness script, for every m-of-n and all three formats.
+        let psbt_hex = "70736274ff0100750200000001658f29a8109114f4a63627cb8cf1958f3ecaf4d1f583f25055de64b0da4793120000000000ffffffff02983a0000000000001976a914275fcd8353ccfc1663b74fc0418b5edd14c7cc8788ac102700000000000017a9148898a8109c21962115fdd9b3138e0a776fa159e5870000000000010120307500000000000017a9148898a8109c21962115fdd9b3138e0a776fa159e587010469522103d534107f17143fd2d03476377a80a81fa9435d418d7cd0792e7547271f25d86f2103ecca71ce9657a0107976abd5f8487b43f22274bfd659b03f5aff44a471677aee2103ae9e75189865f9dee7caa2c11b5344574e736fb8e56fbb81ef6172854eb1575e53ae220603d534107f17143fd2d03476377a80a81fa9435d418d7cd0792e7547271f25d86f18f1c149f52c00008000000080000000800000000000000000000000";
+        let base = Psbt::deserialize(&Vec::from_hex(psbt_hex).unwrap()).unwrap();
+        let context = ParseContext {
+            master_fingerprint: Fingerprint::from_str("f1c149f5").unwrap(),
+            extended_public_keys: BTreeMap::new(),
+            verify_code: None,
+            multisig_wallet_config: None,
+        };
+        let our_pubkey = *base.inputs[0].bip32_derivation.first_key_value().unwrap().0;
+        let (_, key_source) = base.inputs[0]
+            .bip32_derivation
+            .first_key_value()
+            .map(|(key, key_source)| (*key, key_source.clone()))
+            .unwrap();
+        let secp = bitcoin::secp256k1::Secp256k1::new();
+        let secret_key = bitcoin::secp256k1::SecretKey::from_slice(&[1u8; 32]).unwrap();
+        let message = bitcoin::secp256k1::Message::from_digest([0u8; 32]);
+        let dummy_sig =
+            bitcoin::ecdsa::Signature::sighash_all(secp.sign_ecdsa(&message, &secret_key));
+
+        // The real 2-of-3 P2SH vector from 3.2.1, already signed by one
+        // cosigner and parsed without any interface xpub.
+        let mut psbt = base.clone();
+        psbt.inputs[0].partial_sigs.insert(
+            bitcoin::PublicKey::from_str(
+                "03ecca71ce9657a0107976abd5f8487b43f22274bfd659b03f5aff44a471677aee",
+            )
+            .unwrap(),
+            dummy_sig,
+        );
+        let redeem_script = psbt.inputs[0].redeem_script.clone().unwrap();
+        let expected = calculate_multi_address(
+            &redeem_script,
+            MultiSigFormat::P2sh,
+            &crate::multi_sig::Network::MainNet,
+        )
+        .unwrap();
+        let wpsbt = WrappedPsbt { psbt };
+        assert!(wpsbt.check(Left(&context)).is_ok());
+        let parsed = wpsbt.parse(Some(&context)).unwrap();
+        let input = &parsed.detail.from[0];
+        assert_eq!(Some(expected.as_str()), input.address.as_deref());
+        assert!(input.is_multisig);
+        assert_eq!(input.sign_status, (1, 2));
+        assert!(input.need_sign);
+        assert!(input.path.is_some());
+
+        // If the existing signature is ours, check must reject the PSBT at
+        // the check layer instead of signing it again.
+        let mut psbt = base.clone();
+        psbt.inputs[0]
+            .partial_sigs
+            .insert(bitcoin::PublicKey::new(our_pubkey), dummy_sig);
+        let wpsbt = WrappedPsbt { psbt };
+        assert!(wpsbt.check(Left(&context)).is_err());
+        let parsed = wpsbt.parse(Some(&context)).unwrap();
+        assert_eq!(parsed.detail.from[0].sign_status, (1, 2));
+        assert!(!parsed.detail.from[0].need_sign);
+
+        for total in 1u8..=8 {
+            for threshold in 1u8..=total {
+                let mut pubkeys = vec![our_pubkey];
+                for i in 1..total {
+                    let secret = bitcoin::secp256k1::SecretKey::from_slice(&[i; 32]).unwrap();
+                    pubkeys.push(secret.public_key(&secp));
+                }
+                let mut builder = bitcoin::script::Builder::new().push_int(threshold as i64);
+                for pubkey in pubkeys.iter() {
+                    builder = builder.push_key(&bitcoin::PublicKey::new(*pubkey));
+                }
+                let script = builder
+                    .push_int(total as i64)
+                    .push_opcode(bitcoin::opcodes::all::OP_CHECKMULTISIG)
+                    .into_script();
+
+                for format in ["p2sh", "p2wsh", "p2wsh-p2sh"] {
+                    let mut psbt = base.clone();
+                    psbt.inputs[0].partial_sigs.clear();
+                    let expected = match format {
+                        "p2sh" => {
+                            psbt.inputs[0].redeem_script = Some(script.clone());
+                            psbt.inputs[0].witness_script = None;
+                            psbt.inputs[0].witness_utxo = Some(TxOut {
+                                value: bitcoin::Amount::from_sat(30000),
+                                script_pubkey: ScriptBuf::new_p2sh(&script.script_hash()),
+                            });
+                            calculate_multi_address(
+                                &script,
+                                MultiSigFormat::P2sh,
+                                &crate::multi_sig::Network::MainNet,
+                            )
+                            .unwrap()
+                        }
+                        "p2wsh" => {
+                            psbt.inputs[0].redeem_script = None;
+                            psbt.inputs[0].witness_script = Some(script.clone());
+                            psbt.inputs[0].witness_utxo = Some(TxOut {
+                                value: bitcoin::Amount::from_sat(30000),
+                                script_pubkey: ScriptBuf::new_p2wsh(&script.wscript_hash()),
+                            });
+                            calculate_multi_address(
+                                &script,
+                                MultiSigFormat::P2wsh,
+                                &crate::multi_sig::Network::MainNet,
+                            )
+                            .unwrap()
+                        }
+                        _ => {
+                            let p2wsh = ScriptBuf::new_p2wsh(&script.wscript_hash());
+                            psbt.inputs[0].redeem_script = Some(p2wsh.clone());
+                            psbt.inputs[0].witness_script = Some(script.clone());
+                            psbt.inputs[0].witness_utxo = Some(TxOut {
+                                value: bitcoin::Amount::from_sat(30000),
+                                script_pubkey: ScriptBuf::new_p2sh(&p2wsh.script_hash()),
+                            });
+                            calculate_multi_address(
+                                &script,
+                                MultiSigFormat::P2wshP2sh,
+                                &crate::multi_sig::Network::MainNet,
+                            )
+                            .unwrap()
+                        }
+                    };
+
+                    // Keep only the local derivation, as external coordinators
+                    // commonly do; add one cosigner signature short of the
+                    // threshold (or one signature for 1-of-n).
+                    assert_eq!(psbt.inputs[0].bip32_derivation.len(), 1);
+                    let signed_count = if threshold == 1 { 1 } else { threshold - 1 };
+                    for i in 0..signed_count {
+                        let signer = if total == 1 {
+                            pubkeys[0]
+                        } else {
+                            pubkeys[1 + i as usize]
+                        };
+                        psbt.inputs[0]
+                            .partial_sigs
+                            .insert(bitcoin::PublicKey::new(signer), dummy_sig);
+                    }
+
+                    let wpsbt = WrappedPsbt { psbt };
+                    // 1-of-1 can only be signed by us, so a signed copy must
+                    // be rejected at check time.
+                    if threshold == 1 && total == 1 {
+                        assert!(wpsbt.check(Left(&context)).is_err());
+                    } else {
+                        assert!(wpsbt.check(Left(&context)).is_ok());
+                    }
+                    let parsed = wpsbt.parse(Some(&context)).unwrap();
+                    let input = &parsed.detail.from[0];
+                    assert_eq!(Some(expected.as_str()), input.address.as_deref());
+                    assert!(input.is_multisig);
+                    assert!(input.path.is_some());
+                    if threshold == 1 {
+                        assert_eq!(input.sign_status, (1, 1));
+                        assert!(!input.need_sign);
+                    } else {
+                        assert_eq!(input.sign_status, (threshold as u32 - 1, threshold as u32));
+                        assert!(input.need_sign);
+                    }
+                }
+            }
+        }
+
+        // A key that is not committed in the redeem script must not be
+        // accepted as ours, even when the PSBT is already signed.
+        let mut psbt = base.clone();
+        psbt.inputs[0].partial_sigs.insert(
+            bitcoin::PublicKey::from_str(
+                "03ecca71ce9657a0107976abd5f8487b43f22274bfd659b03f5aff44a471677aee",
+            )
+            .unwrap(),
+            dummy_sig,
+        );
+        psbt.inputs[0].bip32_derivation.clear();
+        psbt.inputs[0].bip32_derivation.insert(
+            bitcoin::secp256k1::PublicKey::from_str(
+                "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+            )
+            .unwrap(),
+            key_source,
+        );
+        assert!(WrappedPsbt { psbt }.check(Left(&context)).is_err());
     }
 
     #[test]
